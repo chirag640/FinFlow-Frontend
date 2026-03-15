@@ -198,11 +198,15 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
   }) async {
     state = state.copyWith(isLoading: true);
     try {
-      final res = await _dio.post(ApiEndpoints.register, data: {
-        'email': email,
-        'username': username,
-        'password': password,
-      });
+      final res = await _dio.post(
+        ApiEndpoints.register,
+        data: {
+          'email': email,
+          'username': username,
+          'password': password,
+        },
+        options: Options(receiveTimeout: const Duration(seconds: 90)),
+      );
       // Registration intentionally returns NO tokens — they are only issued
       // by verifyEmail() once the user proves ownership of their address.
       final user =
@@ -218,6 +222,17 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
       );
       return user;
     } on DioException catch (e) {
+      if (e.type == DioExceptionType.receiveTimeout ||
+          e.type == DioExceptionType.connectionTimeout) {
+        // Backend may have created/updated a pending unverified account but
+        // timed out while sending OTP mail. Try login to recover pending
+        // verification context and route user to OTP screen.
+        await login(email: email, password: password);
+        if (state.pendingVerificationUserId != null) {
+          state = state.copyWith(isLoading: false, error: null);
+          return null;
+        }
+      }
       state = state.copyWith(isLoading: false, error: _extractError(e));
       return null;
     }
@@ -306,7 +321,11 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
   // ── Resend OTP ────────────────────────────────────────────────────────────
   Future<bool> resendOtp(String userId) async {
     try {
-      await _dio.post(ApiEndpoints.resendOtp, data: {'userId': userId});
+      await _dio.post(
+        ApiEndpoints.resendOtp,
+        data: {'userId': userId},
+        options: Options(receiveTimeout: const Duration(seconds: 90)),
+      );
       return true;
     } on DioException catch (e) {
       state = state.copyWith(error: _extractError(e));

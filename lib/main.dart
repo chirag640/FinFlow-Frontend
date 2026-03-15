@@ -1,4 +1,6 @@
-﻿import 'package:flutter/foundation.dart';
+﻿import 'dart:async';
+
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -30,7 +32,6 @@ Future<void> main() async {
 
   try {
     await HiveService.init();
-    await NotificationService.init();
   } catch (e) {
     debugPrint('[FinFlow] Initialization error: $e');
   }
@@ -47,6 +48,13 @@ Future<void> main() async {
     ),
   );
   runApp(const ProviderScope(child: FinFlowApp()));
+
+  // Keep non-critical startup work out of the first frame path.
+  unawaited(
+    NotificationService.init().catchError(
+      (Object e) => debugPrint('[FinFlow] Notification init error: $e'),
+    ),
+  );
 }
 
 class FinFlowApp extends ConsumerWidget {

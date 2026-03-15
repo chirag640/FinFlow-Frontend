@@ -110,7 +110,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     controller: _usernameCtrl,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
-                    decoration: _inputDec('Username (e.g. chirag19)',
+                    decoration: _inputDec('Username',
                         Icons.person_outline_rounded),
                     validator: (v) {
                       if (v == null || v.trim().length < 3) {

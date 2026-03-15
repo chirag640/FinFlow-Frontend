@@ -21,7 +21,10 @@ String formatDioError(
   String fallback = 'Something went wrong',
   bool includeReference = true,
 }) {
-  final msg = e.response?.data?['message'];
+  final data = e.response?.data;
+  final dynamic msg = data is Map<String, dynamic>
+      ? data['message']
+      : (data is Map ? data['message'] : null);
   final base = msg is List
       ? msg.join(', ')
       : (msg is String ? msg : (e.message ?? fallback));

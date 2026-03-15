@@ -309,15 +309,22 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
           controller: _digits[index],
           focusNode: _focuses[index],
           keyboardType: TextInputType.number,
+          textInputAction:
+              index == 5 ? TextInputAction.done : TextInputAction.next,
           textAlign: TextAlign.center,
+          textAlignVertical: TextAlignVertical.center,
           maxLength: 6, // allow paste of full code into first field
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+          cursorColor: AppColors.primary,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontWeight: FontWeight.w700,
+                fontSize: 22,
+                height: 1.05,
+                fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
               ),
           decoration: InputDecoration(
             counterText: '',
+            contentPadding: const EdgeInsets.symmetric(vertical: 10),
             filled: true,
             fillColor: _digits[index].text.isNotEmpty
                 ? AppColors.primary.withValues(alpha: 0.08)

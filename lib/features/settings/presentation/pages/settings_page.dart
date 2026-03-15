@@ -847,16 +847,16 @@ class SettingsPage extends ConsumerWidget {
       BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Delete cloud account?'),
         content: const Text(
             'This permanently deletes your FinFlow cloud account and all synced data. Your local device data will remain.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogCtx, false),
               child: const Text('Cancel')),
           TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogCtx, true),
               child: const Text('Delete',
                   style: TextStyle(color: AppColors.error))),
         ],
@@ -866,6 +866,9 @@ class SettingsPage extends ConsumerWidget {
       final ok = await ref.read(cloudAuthProvider.notifier).deleteAccount();
       if (ok) {
         await ref.read(authStateProvider.notifier).logout();
+        if (context.mounted) {
+          context.go(AppRoutes.authLanding);
+        }
       }
     }
   }
@@ -1015,16 +1018,16 @@ class SettingsPage extends ConsumerWidget {
   Future<void> _confirmDisconnect(BuildContext context, WidgetRef ref) async {
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (_) => AlertDialog(
+      builder: (dialogCtx) => AlertDialog(
         title: const Text('Disconnect cloud account?'),
         content: const Text(
             'Your local data will remain. Cloud backup and sync will be disabled.'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
+              onPressed: () => Navigator.pop(dialogCtx, false),
               child: const Text('Cancel')),
           TextButton(
-              onPressed: () => Navigator.pop(context, true),
+              onPressed: () => Navigator.pop(dialogCtx, true),
               child: const Text('Disconnect',
                   style: TextStyle(color: AppColors.error))),
         ],
@@ -1033,6 +1036,9 @@ class SettingsPage extends ConsumerWidget {
     if (confirmed == true) {
       await ref.read(cloudAuthProvider.notifier).logout();
       await ref.read(authStateProvider.notifier).logout();
+      if (context.mounted) {
+        context.go(AppRoutes.authLanding);
+      }
     }
   }
 }
@@ -1140,6 +1146,60 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
     return '${diff.inDays}d ago';
   }
 
+  String _displayDeviceName(CloudSession session) {
+    final raw = session.deviceName?.trim();
+    if (raw != null &&
+        raw.isNotEmpty &&
+        !raw.toLowerCase().contains('unknown browser') &&
+        !raw.toLowerCase().contains('unknown os')) {
+      return raw;
+    }
+
+    final ua = session.userAgent?.toLowerCase() ?? '';
+    if (ua.isEmpty) return 'Unknown device';
+
+    if (ua.contains('dart/') || ua.contains('flutter')) {
+      if (ua.contains('android')) return 'Flutter App on Android';
+      if (ua.contains('iphone') || ua.contains('ipad') || ua.contains('ios')) {
+        return 'Flutter App on iOS';
+      }
+      if (ua.contains('windows')) return 'Flutter App on Windows';
+      if (ua.contains('mac os') || ua.contains('macintosh')) {
+        return 'Flutter App on macOS';
+      }
+      if (ua.contains('linux')) return 'Flutter App on Linux';
+      return 'Flutter App';
+    }
+
+    final os = ua.contains('android')
+        ? 'Android'
+        : ua.contains('iphone') || ua.contains('ipad') || ua.contains('ios')
+            ? 'iOS'
+            : ua.contains('windows')
+                ? 'Windows'
+                : ua.contains('mac os') || ua.contains('macintosh')
+                    ? 'macOS'
+                    : ua.contains('linux')
+                        ? 'Linux'
+                        : 'Unknown OS';
+
+    final browser = ua.contains('edg/')
+        ? 'Edge'
+        : ua.contains('opr/') || ua.contains('opera')
+            ? 'Opera'
+            : ua.contains('samsungbrowser/')
+                ? 'Samsung Internet'
+                : ua.contains('chrome/') || ua.contains('crios/')
+                    ? 'Chrome'
+                    : ua.contains('firefox/') || ua.contains('fxios/')
+                        ? 'Firefox'
+                        : ua.contains('safari/') && !ua.contains('chrome/')
+                            ? 'Safari'
+                            : 'Unknown Browser';
+
+    return '$browser on $os';
+  }
+
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
@@ -1212,7 +1272,7 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
 
                           return ListTile(
                             contentPadding: EdgeInsets.zero,
-                            title: Text(s.deviceName ?? 'Unknown device'),
+                            title: Text(_displayDeviceName(s)),
                             subtitle: Text(
                               subtitle,
                               style: const TextStyle(

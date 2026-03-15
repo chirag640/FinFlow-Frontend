@@ -20,13 +20,15 @@ abstract class RequestMetaKeys {
 
 abstract class RequestHeaderKeys {
   static const requestId = 'x-request-id';
+  static const deviceName = 'x-device-name';
 }
 
 // ── Global Dio provider ──────────────────────────────────────────────────────
 // ignore: unused_element — consumed via cloud_auth_provider.dart
 final dioProvider = Provider<Dio>((ref) {
   const baseUrl = String.fromEnvironment('API_BASE_URL',
-      defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
+      defaultValue: 'http://10.0.2.2:3000/api/v1');
+  // defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
 
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
@@ -57,6 +59,7 @@ class AuthInterceptor extends Interceptor {
   );
   bool _isRefreshing = false;
   final Random _random = Random();
+  static final String _clientDeviceName = _buildClientDeviceName();
   // Requests that arrived while a refresh was already in-flight.
   // Each completer receives the new access token on refresh success,
   // or an error on failure, so all queued requests are replayed correctly.
@@ -75,6 +78,7 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
+    _attachDeviceName(options);
     _attachRequestId(options);
     _attachIdempotencyKey(options);
 
@@ -83,6 +87,23 @@ class AuthInterceptor extends Interceptor {
       options.headers['Authorization'] = 'Bearer $token';
     }
     handler.next(options);
+  }
+
+  void _attachDeviceName(RequestOptions options) {
+    if (options.headers.containsKey(RequestHeaderKeys.deviceName)) return;
+    options.headers[RequestHeaderKeys.deviceName] = _clientDeviceName;
+  }
+
+  static String _buildClientDeviceName() {
+    if (kIsWeb) return 'Web Browser';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'Flutter Android App',
+      TargetPlatform.iOS => 'Flutter iOS App',
+      TargetPlatform.macOS => 'Flutter macOS App',
+      TargetPlatform.windows => 'Flutter Windows App',
+      TargetPlatform.linux => 'Flutter Linux App',
+      _ => 'Flutter App',
+    };
   }
 
   @override
