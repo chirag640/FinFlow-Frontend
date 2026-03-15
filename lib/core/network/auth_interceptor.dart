@@ -26,7 +26,7 @@ abstract class RequestHeaderKeys {
 // ignore: unused_element — consumed via cloud_auth_provider.dart
 final dioProvider = Provider<Dio>((ref) {
   const baseUrl = String.fromEnvironment('API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:3000/api/v1');
+      defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
 
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
