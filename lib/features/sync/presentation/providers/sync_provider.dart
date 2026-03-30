@@ -7,6 +7,8 @@ import '../../../../core/network/network_error.dart';
 import '../../../../core/providers/connectivity_provider.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../features/expenses/domain/entities/expense.dart';
+import '../../../goals/domain/entities/savings_goal.dart';
+import '../../../goals/presentation/providers/goals_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/cloud_auth_provider.dart';
 import '../../../budgets/domain/entities/budget.dart';
@@ -155,13 +157,43 @@ class SyncNotifier extends StateNotifier<SyncState> {
               })
           .toList();
 
+      // ── Push local goals ────────────────────────────────────────────────
+      final goalDs = _ref.read(goalDatasourceProvider);
+      final allGoals = goalDs.getAll();
+      final goals = allGoals
+          .map((g) => {
+                'id': g.id,
+                'title': g.title,
+                'emoji': g.emoji,
+                'targetAmount': g.targetAmount,
+                'currentAmount': g.currentAmount,
+                'deadline': g.deadline?.toIso8601String(),
+                'colorIndex': g.colorIndex,
+                'updatedAt': now,
+                'deleted': false,
+              })
+          .toList();
+
+      final pendingGoalDelIds = goalDs.getPendingDeletions();
+      for (final id in pendingGoalDelIds) {
+        final alreadyPresent = goals.any((g) => g['id'] == id);
+        if (!alreadyPresent) {
+          goals.add({
+            'id': id,
+            'updatedAt': now,
+            'deleted': true,
+          });
+        }
+      }
+
       debugPrint(
-          '[FinFlow Sync] 📤 Pushing ${expenses.length} expenses (${pendingDelIds.length} pending deletes), ${budgets.length} budgets');
+          '[FinFlow Sync] 📤 Pushing ${expenses.length} expenses (${pendingDelIds.length} pending deletes), ${budgets.length} budgets, ${goals.length} goals (${pendingGoalDelIds.length} pending deletes)');
       await dio.post(
         '/sync/push',
         data: {
           if (expenses.isNotEmpty) 'expenses': expenses,
           if (budgets.isNotEmpty) 'budgets': budgets,
+          if (goals.isNotEmpty) 'goals': goals,
         },
       );
       debugPrint('[FinFlow Sync] ✅ Push successful');
@@ -171,6 +203,11 @@ class SyncNotifier extends StateNotifier<SyncState> {
         await expDs.clearAllPendingDeletions();
         debugPrint(
             '[FinFlow Sync] 🗑 Cleared ${pendingDelIds.length} pending deletions');
+      }
+      if (pendingGoalDelIds.isNotEmpty) {
+        await goalDs.clearAllPendingDeletions();
+        debugPrint(
+            '[FinFlow Sync] 🗑 Cleared ${pendingGoalDelIds.length} goal pending deletions');
       }
 
       // ── Pull server changes ──────────────────────────────────────────────
@@ -277,6 +314,58 @@ class SyncNotifier extends StateNotifier<SyncState> {
         }
         _ref.read(budgetProvider.notifier).refresh();
         debugPrint('[FinFlow Sync] 💰 Synced ${serverBudgets.length} budgets');
+      }
+
+      // ── Sync goals from cloud ────────────────────────────────────────────
+      final serverGoals = (pullData?['goals'] as List?) ?? [];
+      if (serverGoals.isNotEmpty) {
+        final goalsDs = _ref.read(goalDatasourceProvider);
+        final pendingGoalDeletes = goalsDs.getPendingDeletions().toSet();
+        final toUpsertGoals = <SavingsGoal>[];
+        var deletedCount = 0;
+
+        for (final raw in serverGoals) {
+          final sg = raw as Map<String, dynamic>;
+          final goalId = sg['id'] as String?;
+          if (goalId == null) continue;
+
+          if (sg['deleted'] == true) {
+            await goalsDs.delete(goalId, trackPending: false);
+            await goalsDs.clearPendingDeletion(goalId);
+            deletedCount++;
+            continue;
+          }
+
+          // Guard against resurrection: goal is pending local deletion.
+          if (pendingGoalDeletes.contains(goalId)) continue;
+
+          final deadline = sg['deadline'];
+          final mapped = <String, dynamic>{
+            'id': goalId,
+            'title': (sg['title'] as String?) ?? 'Goal',
+            'emoji': (sg['emoji'] as String?) ?? '🎯',
+            'targetAmount': ((sg['targetAmount'] as num?) ?? 0).toDouble(),
+            'currentAmount': ((sg['currentAmount'] as num?) ?? 0).toDouble(),
+            'deadline': deadline == null
+                ? null
+                : (deadline is String
+                    ? deadline
+                    : (deadline as DateTime).toIso8601String()),
+            'colorIndex': (sg['colorIndex'] as num?)?.toInt() ?? 0,
+          };
+
+          try {
+            toUpsertGoals.add(SavingsGoal.fromJson(mapped));
+          } catch (_) {}
+        }
+
+        for (final goal in toUpsertGoals) {
+          await goalsDs.save(goal);
+        }
+
+        _ref.read(goalsProvider.notifier).refresh();
+        debugPrint(
+            '[FinFlow Sync] 🎯 Synced ${toUpsertGoals.length} goals, deleted $deletedCount');
       }
 
       state = state.copyWith(

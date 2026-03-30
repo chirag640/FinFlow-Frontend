@@ -16,6 +16,8 @@ abstract class AppConstants {
   static const String upiIdsBox = 'ff_upi_ids';
   // Tracks expense IDs deleted while offline for server reconciliation on next sync
   static const String pendingDeletionsBox = 'ff_pending_deletions';
+  // Tracks goal IDs deleted while offline for server reconciliation on next sync
+  static const String goalPendingDeletionsBox = 'ff_goal_pending_deletions';
 
   // Secure storage keys
   static const String pinKey = 'ff_pin';

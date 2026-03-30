@@ -348,8 +348,6 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
                       decoration: _fieldDecoration('Add a note...'),
                     ).animate(delay: 250.ms).fadeIn(duration: 300.ms),
                     SizedBox(height: R.xl),
-                    // Recurring toggle (Commented out for this version)
-                    /*
                     RecurringSectionWidget(
                       isRecurring: _isRecurring,
                       frequency: _recurringFrequency,
@@ -361,7 +359,6 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
                       delayMs: 275,
                     ),
                     SizedBox(height: R.xl),
-                    */
                     DSButton(
                       label: _isLoading
                           ? 'Saving...'

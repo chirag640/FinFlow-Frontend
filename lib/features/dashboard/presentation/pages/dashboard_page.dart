@@ -51,6 +51,11 @@ class DashboardPage extends ConsumerWidget {
             tooltip: 'AI Insights',
           ),
           IconButton(
+            icon: const Icon(Icons.trending_up_rounded),
+            onPressed: () => context.go(AppRoutes.investments),
+            tooltip: 'Investments',
+          ),
+          IconButton(
             icon: const Icon(Icons.savings_rounded),
             onPressed: () => context.push(AppRoutes.goals),
             tooltip: 'Savings Goals',

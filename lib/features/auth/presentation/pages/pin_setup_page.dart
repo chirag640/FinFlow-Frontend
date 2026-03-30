@@ -66,13 +66,17 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
       _error = null;
       switch (_step) {
         case _Step.verifyOld:
-          if (_currentPin.isNotEmpty)
+          if (_currentPin.isNotEmpty) {
             _currentPin = _currentPin.substring(0, _currentPin.length - 1);
+          }
         case _Step.enterNew:
-          if (_pin.isNotEmpty) _pin = _pin.substring(0, _pin.length - 1);
+          if (_pin.isNotEmpty) {
+            _pin = _pin.substring(0, _pin.length - 1);
+          }
         case _Step.confirmNew:
-          if (_confirmPin.isNotEmpty)
+          if (_confirmPin.isNotEmpty) {
             _confirmPin = _confirmPin.substring(0, _confirmPin.length - 1);
+          }
       }
     });
   }

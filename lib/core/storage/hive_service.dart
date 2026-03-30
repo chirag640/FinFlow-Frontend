@@ -14,6 +14,7 @@ abstract class HiveService {
       Hive.openBox(AppConstants.investmentsBox),
       Hive.openBox(AppConstants.upiIdsBox),
       Hive.openBox(AppConstants.pendingDeletionsBox),
+      Hive.openBox(AppConstants.goalPendingDeletionsBox),
     ]);
   }
 
@@ -26,4 +27,6 @@ abstract class HiveService {
   static Box get investments => Hive.box(AppConstants.investmentsBox);
   static Box get upiIds => Hive.box(AppConstants.upiIdsBox);
   static Box get pendingDeletions => Hive.box(AppConstants.pendingDeletionsBox);
+  static Box get goalPendingDeletions =>
+      Hive.box(AppConstants.goalPendingDeletionsBox);
 }

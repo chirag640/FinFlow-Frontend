@@ -27,8 +27,8 @@ abstract class RequestHeaderKeys {
 // ignore: unused_element — consumed via cloud_auth_provider.dart
 final dioProvider = Provider<Dio>((ref) {
   const baseUrl = String.fromEnvironment('API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:3000/api/v1');
-  // defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
+      // defaultValue: 'http://10.0.2.2:3000/api/v1');
+      defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
 
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
@@ -293,26 +293,26 @@ class LoggerInterceptor extends Interceptor {
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
     if (kDebugMode) {
-      print('┌$_line');
-      print('│ 🌐 ${options.method} ${options.baseUrl}${options.path}');
-      print('├$_line');
+      debugPrint('┌$_line');
+      debugPrint('│ 🌐 ${options.method} ${options.baseUrl}${options.path}');
+      debugPrint('├$_line');
 
       if (options.headers.isNotEmpty) {
-        print('│ 📋 Headers:');
-        options.headers.forEach((k, v) => print('│   $k: $v'));
-        print('├$_line');
+        debugPrint('│ 📋 Headers:');
+        options.headers.forEach((k, v) => debugPrint('│   $k: $v'));
+        debugPrint('├$_line');
       }
 
       if (options.queryParameters.isNotEmpty) {
-        print('│ 🔍 Query:');
-        options.queryParameters.forEach((k, v) => print('│   $k: $v'));
-        print('├$_line');
+        debugPrint('│ 🔍 Query:');
+        options.queryParameters.forEach((k, v) => debugPrint('│   $k: $v'));
+        debugPrint('├$_line');
       }
 
       if (options.data != null) {
-        print('│ 📤 Payload:');
+        debugPrint('│ 📤 Payload:');
         _printJson(options.data);
-        print('├$_line');
+        debugPrint('├$_line');
       }
     }
     super.onRequest(options, handler);
@@ -323,18 +323,18 @@ class LoggerInterceptor extends Interceptor {
     if (kDebugMode) {
       final printBody = response.requestOptions.extra['printResponse'] ?? true;
       final requestId = _responseRequestId(response) ?? 'n/a';
-      print('│ ✅ ${response.statusCode} '
+      debugPrint('│ ✅ ${response.statusCode} '
           '${response.requestOptions.method} '
           '${response.requestOptions.path}');
-      print('│ 🧵 requestId: $requestId');
-      print('├$_line');
+      debugPrint('│ 🧵 requestId: $requestId');
+      debugPrint('├$_line');
       if (printBody && response.data != null) {
-        print('│ 📥 Response:');
+        debugPrint('│ 📥 Response:');
         _printJson(response.data);
       } else if (!printBody) {
-        print('│ 📥 [logging disabled for this request]');
+        debugPrint('│ 📥 [logging disabled for this request]');
       }
-      print('└$_line');
+      debugPrint('└$_line');
     }
     super.onResponse(response, handler);
   }
@@ -343,20 +343,20 @@ class LoggerInterceptor extends Interceptor {
   void onError(DioException err, ErrorInterceptorHandler handler) {
     if (kDebugMode) {
       final requestId = _errorRequestId(err) ?? 'n/a';
-      print('│ ❌ ERROR ${err.type.name} — '
+      debugPrint('│ ❌ ERROR ${err.type.name} — '
           '${err.requestOptions.method} ${err.requestOptions.path}');
-      print('│ 🧵 requestId: $requestId');
-      print('├$_line');
-      print('│ 💬 ${err.message}');
+      debugPrint('│ 🧵 requestId: $requestId');
+      debugPrint('├$_line');
+      debugPrint('│ 💬 ${err.message}');
       if (err.response != null) {
-        print('│ 📊 Status: ${err.response?.statusCode}');
-        print('├$_line');
+        debugPrint('│ 📊 Status: ${err.response?.statusCode}');
+        debugPrint('├$_line');
         if (err.response?.data != null) {
-          print('│ 📥 Error body:');
+          debugPrint('│ 📥 Error body:');
           _printJson(err.response!.data);
         }
       }
-      print('└$_line');
+      debugPrint('└$_line');
     }
     super.onError(err, handler);
   }
@@ -393,9 +393,9 @@ class LoggerInterceptor extends Interceptor {
   void _printJson(dynamic data) {
     try {
       final pretty = const JsonEncoder.withIndent('  ').convert(data);
-      pretty.split('\n').forEach((l) => print('│   $l'));
+      pretty.split('\n').forEach((l) => debugPrint('│   $l'));
     } catch (_) {
-      print('│   $data');
+      debugPrint('│   $data');
     }
   }
 }

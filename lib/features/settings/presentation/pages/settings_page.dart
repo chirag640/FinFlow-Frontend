@@ -47,6 +47,14 @@ class SettingsPage extends ConsumerWidget {
         title: const Text('Settings',
             style: TextStyle(
                 fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+        actions: [
+          IconButton(
+            tooltip: 'Search settings',
+            icon: const Icon(Icons.search_rounded),
+            onPressed: () =>
+                _showSettingsSearch(context, ref, cloud, syncState),
+          ),
+        ],
       ),
       body: SafeArea(
         child: ListView(
@@ -67,6 +75,7 @@ class SettingsPage extends ConsumerWidget {
               onSync: syncState.isSyncing
                   ? null
                   : () => ref.read(syncProvider.notifier).sync(),
+              onInvestments: () => context.go(AppRoutes.investments),
               onExport: () => context.push(AppRoutes.export),
             ).animate().fadeIn(delay: 100.ms),
             const Gap(14),
@@ -469,6 +478,11 @@ class SettingsPage extends ConsumerWidget {
         title: 'Export Data',
         subtitle: 'Open export center',
         onTap: () => context.push(AppRoutes.export),
+      ),
+      _SettingsSearchItem(
+        title: 'Investments',
+        subtitle: 'Open investment portfolio',
+        onTap: () => context.go(AppRoutes.investments),
       ),
       _SettingsSearchItem(
         title: 'Organization Branding',
@@ -1396,6 +1410,7 @@ class _QuickActionsRow extends StatelessWidget {
   final bool syncing;
   final VoidCallback onCloud;
   final VoidCallback? onSync;
+  final VoidCallback onInvestments;
   final VoidCallback onExport;
 
   const _QuickActionsRow({
@@ -1403,6 +1418,7 @@ class _QuickActionsRow extends StatelessWidget {
     required this.syncing,
     required this.onCloud,
     required this.onSync,
+    required this.onInvestments,
     required this.onExport,
   });
 
@@ -1425,6 +1441,14 @@ class _QuickActionsRow extends StatelessWidget {
             icon: syncing ? Icons.sync : Icons.sync_rounded,
             label: syncing ? 'Syncing' : 'Sync Now',
             onTap: onSync,
+          ),
+        ),
+        const Gap(8),
+        Expanded(
+          child: _QuickActionButton(
+            icon: Icons.trending_up_rounded,
+            label: 'Invest',
+            onTap: onInvestments,
           ),
         ),
         const Gap(8),

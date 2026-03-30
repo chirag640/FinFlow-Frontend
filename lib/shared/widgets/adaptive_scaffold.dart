@@ -35,6 +35,12 @@ class AdaptiveScaffold extends StatelessWidget {
       route: AppRoutes.budgets,
     ),
     _NavItem(
+      icon: Icons.trending_up_outlined,
+      activeIcon: Icons.trending_up_rounded,
+      label: 'Investments',
+      route: AppRoutes.investments,
+    ),
+    _NavItem(
       icon: Icons.settings_outlined,
       activeIcon: Icons.settings_rounded,
       label: 'Settings',
@@ -47,7 +53,8 @@ class AdaptiveScaffold extends StatelessWidget {
     if (loc.startsWith(AppRoutes.expenses)) return 1;
     if (loc.startsWith(AppRoutes.groups)) return 2;
     if (loc.startsWith(AppRoutes.budgets)) return 3;
-    if (loc.startsWith(AppRoutes.settings)) return 4;
+    if (loc.startsWith(AppRoutes.investments)) return 4;
+    if (loc.startsWith(AppRoutes.settings)) return 5;
     return 0;
   }
 

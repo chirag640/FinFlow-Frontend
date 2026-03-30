@@ -63,6 +63,8 @@ class GoalsNotifier extends StateNotifier<GoalsState> {
     state = state.copyWith(goals: goals);
   }
 
+  void refresh() => _load();
+
   Future<void> addGoal({
     required String title,
     required String emoji,

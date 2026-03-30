@@ -255,9 +255,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       final ok = await ref
                           .read(cloudAuthProvider.notifier)
                           .forgotPassword(email);
-                      if (!mounted) return;
+                      if (!mounted || !ctx.mounted) return;
                       setState(() => loading = false);
-                      Navigator.pop(ctx);
+                      Navigator.of(ctx).pop();
                       if (ok) {
                         _showError('Reset code sent if this email exists.');
                         await _showResetPasswordDialog(email);
@@ -335,10 +335,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                             code: code,
                             newPassword: password,
                           );
-                      if (!mounted) return;
+                      if (!mounted || !ctx.mounted) return;
                       setState(() => loading = false);
                       if (ok) {
-                        Navigator.pop(ctx);
+                        Navigator.of(ctx).pop();
                         _showError(
                             'Password reset successful. Please sign in.');
                       }
