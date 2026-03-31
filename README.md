@@ -1,6 +1,6 @@
 # FinFlow Frontend
 
-FinFlow Frontend is a Flutter application for personal finance management, with secure cloud sync, budgeting, expense tracking, group expenses, investments, analytics, and productivity-focused financial flows.
+FinFlow Frontend is a Flutter application for personal finance management, with secure cloud sync, budgeting, expense tracking, group expenses, analytics, and productivity-focused financial flows.
 
 ## Stack
 
@@ -16,7 +16,6 @@ FinFlow Frontend is a Flutter application for personal finance management, with 
 - Expense tracking with category and recurring support
 - Budget planning and spending visibility
 - Group expenses and settlement support
-- Investments and net worth tracking
 - Sync and offline-first data behavior
 
 ## Project Structure
@@ -72,6 +71,18 @@ Android emulator local backend example:
 flutter run --dart-define=API_BASE_URL=http://10.0.2.2:3000/api/v1
 ```
 
+## FCM Push Notifications Setup
+
+The app now syncs FCM device tokens to backend and shows foreground push alerts.
+
+Required setup:
+
+- Add Firebase app config for each target platform (Android/iOS/web as needed)
+- For Android, include `google-services.json` in `android/app/`
+- Ensure backend has Firebase service-account env configured
+
+Without Firebase configuration, the app continues working; FCM features remain disabled gracefully.
+
 ## Build Commands
 
 - Android APK:
@@ -97,6 +108,27 @@ flutter build ios --release
 - Secure tokens are stored with Flutter Secure Storage.
 - API calls go through the shared Dio provider and auth interceptor.
 - Error formatting and request trace IDs are surfaced for debugging.
+
+## AI-Assisted Development Workflow
+
+This workspace includes a production-focused Copilot setup for consistent coding standards.
+
+- Main rules: `../.github/copilot-instructions.md`
+- Local playbooks: `../.copilot/skills/`
+- VS Code automation: `../.vscode/tasks.json`, `../.vscode/settings.json`
+- Setup guide: `../docs/AI_VSCODE_POWER_SETUP.md`
+
+Run full validation from VS Code task `Validate: All` or manually run:
+
+```bash
+flutter analyze
+```
+
+For environment sanity checks:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ../tools/ai/check-dev-environment.ps1
+```
 
 ## Troubleshooting
 

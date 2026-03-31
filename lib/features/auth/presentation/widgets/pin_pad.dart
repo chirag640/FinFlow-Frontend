@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/design/app_colors.dart';
+
 import '../../../../core/design/app_animations.dart';
 import '../../../../core/utils/responsive.dart';
 
@@ -64,6 +64,8 @@ class _PinKeyState extends State<_PinKey> {
   Widget build(BuildContext context) {
     R.init(context);
     final isDelete = widget.label == 'del';
+    final colors = Theme.of(context).colorScheme;
+    final baseSurface = Theme.of(context).scaffoldBackgroundColor;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),
@@ -83,15 +85,15 @@ class _PinKeyState extends State<_PinKey> {
           width: R.s(72),
           height: R.s(72),
           decoration: BoxDecoration(
-            color: _pressed ? AppColors.surfaceVariant : AppColors.background,
+            color: _pressed ? colors.surfaceContainerHighest : baseSurface,
             shape: BoxShape.circle,
-            border: Border.all(color: AppColors.border),
+            border: Border.all(color: colors.outlineVariant),
           ),
           child: Center(
             child: isDelete
                 ? Icon(
                     Icons.backspace_outlined,
-                    color: AppColors.textSecondary,
+                    color: colors.onSurfaceVariant,
                     size: R.s(22),
                   )
                 : Text(
@@ -99,7 +101,7 @@ class _PinKeyState extends State<_PinKey> {
                     style: TextStyle(
                       fontSize: R.t(24),
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: colors.onSurface,
                     ),
                   ),
           ),

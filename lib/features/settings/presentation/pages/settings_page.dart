@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/router/app_router.dart';
@@ -15,12 +16,31 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/cloud_auth_provider.dart';
 import '../../../sync/presentation/providers/sync_provider.dart';
 
-class SettingsPage extends ConsumerWidget {
+class SettingsPage extends ConsumerStatefulWidget {
   const SettingsPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<SettingsPage> createState() => _SettingsPageState();
+}
+
+class _SettingsPageState extends ConsumerState<SettingsPage> {
+  bool _routeSyncTriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _routeSyncTriggered) return;
+      _routeSyncTriggered = true;
+      ref.read(syncProvider.notifier).onRouteVisible('settings');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
+
     final cloud = ref.watch(cloudAuthProvider);
     final syncState = ref.watch(syncProvider);
     final settings = ref.watch(settingsProvider);
@@ -39,14 +59,14 @@ class SettingsPage extends ConsumerWidget {
     );
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
         surfaceTintColor: Colors.transparent,
         automaticallyImplyLeading: false,
-        title: const Text('Settings',
+        title: Text('Settings',
             style: TextStyle(
-                fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                fontWeight: FontWeight.w800, color: colors.onSurface)),
         actions: [
           IconButton(
             tooltip: 'Search settings',
@@ -75,7 +95,6 @@ class SettingsPage extends ConsumerWidget {
               onSync: syncState.isSyncing
                   ? null
                   : () => ref.read(syncProvider.notifier).sync(),
-              onInvestments: () => context.go(AppRoutes.investments),
               onExport: () => context.push(AppRoutes.export),
             ).animate().fadeIn(delay: 100.ms),
             const Gap(14),
@@ -478,11 +497,6 @@ class SettingsPage extends ConsumerWidget {
         title: 'Export Data',
         subtitle: 'Open export center',
         onTap: () => context.push(AppRoutes.export),
-      ),
-      _SettingsSearchItem(
-        title: 'Investments',
-        subtitle: 'Open investment portfolio',
-        onTap: () => context.go(AppRoutes.investments),
       ),
       _SettingsSearchItem(
         title: 'Organization Branding',
@@ -1346,6 +1360,7 @@ class _SettingsHeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final name = cloud.user?.name.trim().isNotEmpty == true
         ? cloud.user!.name
         : (cloud.user?.email ?? 'Local User');
@@ -1355,9 +1370,9 @@ class _SettingsHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(R.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Row(
         children: [
@@ -1381,14 +1396,14 @@ class _SettingsHeroCard extends StatelessWidget {
                   style: TextStyle(
                     fontSize: R.t(15),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: colors.onSurface,
                   ),
                 ),
                 Text(
                   '@$username',
                   style: TextStyle(
                     fontSize: R.t(12),
-                    color: AppColors.textSecondary,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -1410,7 +1425,6 @@ class _QuickActionsRow extends StatelessWidget {
   final bool syncing;
   final VoidCallback onCloud;
   final VoidCallback? onSync;
-  final VoidCallback onInvestments;
   final VoidCallback onExport;
 
   const _QuickActionsRow({
@@ -1418,7 +1432,6 @@ class _QuickActionsRow extends StatelessWidget {
     required this.syncing,
     required this.onCloud,
     required this.onSync,
-    required this.onInvestments,
     required this.onExport,
   });
 
@@ -1446,9 +1459,9 @@ class _QuickActionsRow extends StatelessWidget {
         const Gap(8),
         Expanded(
           child: _QuickActionButton(
-            icon: Icons.trending_up_rounded,
-            label: 'Invest',
-            onTap: onInvestments,
+            icon: Icons.lock_outline_rounded,
+            label: 'Security',
+            onTap: () => context.push(AppRoutes.changePin),
           ),
         ),
         const Gap(8),
@@ -1477,21 +1490,22 @@ class _QuickActionButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(R.md),
       child: Ink(
         padding: EdgeInsets.symmetric(vertical: R.s(10)),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: colors.surface,
           borderRadius: BorderRadius.circular(R.md),
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: colors.outlineVariant),
         ),
         child: Column(
           children: [
             Icon(icon,
                 color:
-                    onTap == null ? AppColors.textDisabled : AppColors.primary,
+                    onTap == null ? colors.onSurfaceVariant : AppColors.primary,
                 size: R.s(18)),
             const Gap(4),
             Text(
@@ -1499,9 +1513,8 @@ class _QuickActionButton extends StatelessWidget {
               style: TextStyle(
                 fontSize: R.t(11),
                 fontWeight: FontWeight.w600,
-                color: onTap == null
-                    ? AppColors.textDisabled
-                    : AppColors.textPrimary,
+                color:
+                    onTap == null ? colors.onSurfaceVariant : colors.onSurface,
               ),
             ),
           ],
@@ -1524,11 +1537,12 @@ class _CompactSection extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(R.md),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.outlineVariant),
       ),
       clipBehavior: Clip.hardEdge,
       child: Theme(
@@ -1542,7 +1556,7 @@ class _CompactSection extends StatelessWidget {
             style: TextStyle(
               fontSize: R.t(13),
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: colors.onSurface,
             ),
           ),
           children: [child],
@@ -1557,15 +1571,18 @@ class _SettingsCard extends StatelessWidget {
   const _SettingsCard({required this.children});
 
   @override
-  Widget build(BuildContext context) => Container(
-        decoration: BoxDecoration(
-          color: AppColors.surface,
-          borderRadius: BorderRadius.circular(R.md),
-          border: Border.all(color: AppColors.border),
-        ),
-        clipBehavior: Clip.hardEdge,
-        child: Column(children: children),
-      );
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return Container(
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      clipBehavior: Clip.hardEdge,
+      child: Column(children: children),
+    );
+  }
 }
 
 class _SettingsTile extends StatelessWidget {
@@ -1586,30 +1603,33 @@ class _SettingsTile extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => ListTile(
-        onTap: onTap,
-        leading: Container(
-          width: R.s(36),
-          height: R.s(36),
-          decoration: BoxDecoration(
-            color: iconColor.withValues(alpha: 0.12),
-            borderRadius: BorderRadius.circular(R.s(10)),
-          ),
-          child: Icon(icon, color: iconColor, size: R.s(20)),
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    return ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: R.s(36),
+        height: R.s(36),
+        decoration: BoxDecoration(
+          color: iconColor.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(R.s(10)),
         ),
-        title: Text(title,
-            style: TextStyle(
-                fontWeight: FontWeight.w600,
-                fontSize: R.t(14),
-                color: AppColors.textPrimary)),
-        subtitle: subtitle != null
-            ? Text(subtitle!,
-                style: TextStyle(
-                    fontSize: R.t(12), color: AppColors.textSecondary))
-            : null,
-        trailing: trailing,
-        contentPadding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.xs),
-      );
+        child: Icon(icon, color: iconColor, size: R.s(20)),
+      ),
+      title: Text(title,
+          style: TextStyle(
+              fontWeight: FontWeight.w600,
+              fontSize: R.t(14),
+              color: colors.onSurface)),
+      subtitle: subtitle != null
+          ? Text(subtitle!,
+              style:
+                  TextStyle(fontSize: R.t(12), color: colors.onSurfaceVariant))
+          : null,
+      trailing: trailing,
+      contentPadding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.xs),
+    );
+  }
 }
 
 // ── Biometric Tile ────────────────────────────────────────────────────────────
@@ -1637,10 +1657,11 @@ class _BiometricTileState extends State<_BiometricTile> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     if (!_available) {
-      return const _SettingsTile(
+      return _SettingsTile(
         icon: Icons.fingerprint_rounded,
-        iconColor: AppColors.textTertiary,
+        iconColor: colors.onSurfaceVariant,
         title: 'Biometric Unlock',
         subtitle: 'Not available on this device',
       );
@@ -1661,14 +1682,14 @@ class _BiometricTileState extends State<_BiometricTile> {
           style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: R.t(14),
-              color: AppColors.textPrimary)),
+              color: colors.onSurface)),
       subtitle: Text(
         widget.settings.biometricEnabled
             ? 'Fingerprint / Face ID enabled'
             : 'Use fingerprint or Face ID to unlock',
-        style: TextStyle(fontSize: R.t(12), color: AppColors.textSecondary),
+        style: TextStyle(fontSize: R.t(12), color: colors.onSurfaceVariant),
       ),
-      trailing: Switch(
+      trailing: Switch.adaptive(
         value: widget.settings.biometricEnabled,
         onChanged: (val) async {
           if (val) {

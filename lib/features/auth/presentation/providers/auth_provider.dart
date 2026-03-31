@@ -1,6 +1,7 @@
 ﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../domain/entities/app_user.dart';
+
 import '../../data/repositories/auth_repository_impl.dart';
+import '../../domain/entities/app_user.dart';
 
 final authRepositoryProvider = Provider<AuthRepository>(
   (ref) => AuthRepository(),
@@ -133,6 +134,12 @@ class AuthNotifier extends StateNotifier<AuthState> {
       state = state.copyWith(error: 'Incorrect PIN');
     }
     return valid;
+  }
+
+  /// Called after a successful biometric prompt on lock screen.
+  void unlockWithBiometric() {
+    if (!state.hasPin) return;
+    state = state.copyWith(isAuthenticated: true, error: null);
   }
 
   // ── Remove PIN ─────────────────────────────────────────────────────────────

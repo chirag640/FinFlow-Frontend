@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+
+import '../../utils/responsive.dart';
+import '../app_animations.dart';
 import '../app_colors.dart';
 import '../app_radius.dart';
 import '../app_shadows.dart';
-import '../app_animations.dart';
-import '../../utils/responsive.dart';
 
 class DSCard extends StatefulWidget {
   final Widget child;
@@ -37,7 +38,8 @@ class _DSCardState extends State<DSCard> {
   Widget build(BuildContext context) {
     R.init(context);
     final radius = widget.borderRadius ?? AppRadius.lgAll;
-    final bg = widget.color ?? AppColors.surface;
+    final colors = Theme.of(context).colorScheme;
+    final bg = widget.color ?? colors.surface;
 
     return MouseRegion(
       onEnter: (_) => setState(() => _isHovered = true),
@@ -65,8 +67,8 @@ class _DSCardState extends State<DSCard> {
             border: widget.hasBorder
                 ? Border.all(
                     color: _isPressed || _isHovered
-                        ? AppColors.borderDark
-                        : AppColors.border,
+                        ? colors.outline
+                        : colors.outlineVariant,
                     width: 1,
                   )
                 : null,

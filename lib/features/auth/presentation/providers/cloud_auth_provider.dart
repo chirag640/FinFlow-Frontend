@@ -1,9 +1,13 @@
-﻿import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'dart:async';
+
 import 'package:dio/dio.dart';
-import '../../../../core/network/auth_interceptor.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+
 import '../../../../core/network/api_endpoints.dart';
+import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/network_error.dart';
+import '../../../../core/services/notification_service.dart';
 import 'auth_provider.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -164,6 +168,8 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
       // ENSURE USER IS SET BEFORE SYNCING
       state = state.copyWith(isConnected: true, isLoading: false, user: user);
 
+      unawaited(NotificationService.syncFcmToken(_dio));
+
       if (user.name.trim().isNotEmpty) {
         await authNotifier.syncFromCloud(
           name: user.name,
@@ -266,6 +272,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
           );
 
       state = state.copyWith(isLoading: false, isConnected: true, user: user);
+      unawaited(NotificationService.syncFcmToken(_dio));
       return user;
     } on DioException catch (e) {
       final data = e.response?.data;
@@ -311,6 +318,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
         user: user,
         clearPending: true,
       );
+      unawaited(NotificationService.syncFcmToken(_dio));
       return user;
     } on DioException catch (e) {
       state = state.copyWith(isLoading: false, error: _extractError(e));
@@ -428,6 +436,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
   // ── Logout ────────────────────────────────────────────────────────────────
   Future<void> logout() async {
     try {
+      await NotificationService.unregisterFcmToken(_dio);
       final token = await _storage.read(key: TokenKeys.refreshToken);
       if (token != null) {
         await _dio.post(ApiEndpoints.logout, data: {'refreshToken': token});

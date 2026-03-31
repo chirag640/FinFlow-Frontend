@@ -1,14 +1,14 @@
 // Figma: Screen/CloudRegister
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/responsive.dart';
 import '../providers/cloud_auth_provider.dart';
-
-import '../../../../core/ui/error_feedback.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
   const RegisterPage({super.key});
@@ -58,15 +58,16 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final hPad = screenWidth > 480 ? (screenWidth - 440) / 2 : 24.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded,
-              color: AppColors.textPrimary),
+          icon:
+              Icon(Icons.arrow_back_ios_rounded, color: colorScheme.onSurface),
           onPressed: () => context.pop(),
         ),
       ),
@@ -110,8 +111,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                     controller: _usernameCtrl,
                     keyboardType: TextInputType.text,
                     textInputAction: TextInputAction.next,
-                    decoration: _inputDec('Username',
-                        Icons.person_outline_rounded),
+                    decoration:
+                        _inputDec('Username', Icons.person_outline_rounded),
                     validator: (v) {
                       if (v == null || v.trim().length < 3) {
                         return 'Min 3 characters';
@@ -226,7 +227,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         labelText: label,
         prefixIcon: Icon(icon, color: AppColors.textTertiary, size: R.s(20)),
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: Theme.of(context).colorScheme.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
           borderSide: const BorderSide(color: AppColors.border),

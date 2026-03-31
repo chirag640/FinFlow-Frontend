@@ -8,8 +8,9 @@ class SavingsGoal extends Equatable {
   final double currentAmount;
   final DateTime? deadline;
   final int colorIndex; // indexes into GoalColors.palette
+  final DateTime updatedAt;
 
-  const SavingsGoal({
+  SavingsGoal({
     required this.id,
     required this.title,
     required this.emoji,
@@ -17,7 +18,8 @@ class SavingsGoal extends Equatable {
     this.currentAmount = 0,
     this.deadline,
     this.colorIndex = 0,
-  });
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   double get progressPercent =>
       targetAmount > 0 ? (currentAmount / targetAmount).clamp(0.0, 1.0) : 0.0;
@@ -35,6 +37,7 @@ class SavingsGoal extends Equatable {
     DateTime? deadline,
     bool clearDeadline = false,
     int? colorIndex,
+    DateTime? updatedAt,
   }) =>
       SavingsGoal(
         id: id,
@@ -44,6 +47,7 @@ class SavingsGoal extends Equatable {
         currentAmount: currentAmount ?? this.currentAmount,
         deadline: clearDeadline ? null : deadline ?? this.deadline,
         colorIndex: colorIndex ?? this.colorIndex,
+        updatedAt: updatedAt ?? DateTime.now(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -54,6 +58,7 @@ class SavingsGoal extends Equatable {
         'currentAmount': currentAmount,
         'deadline': deadline?.toIso8601String(),
         'colorIndex': colorIndex,
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory SavingsGoal.fromJson(Map<String, dynamic> json) => SavingsGoal(
@@ -66,9 +71,25 @@ class SavingsGoal extends Equatable {
             ? DateTime.parse(json['deadline'] as String)
             : null,
         colorIndex: json['colorIndex'] as int? ?? 0,
+        updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
       );
 
+  static DateTime? _parseDateTime(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
+
   @override
-  List<Object?> get props =>
-      [id, title, emoji, targetAmount, currentAmount, deadline, colorIndex];
+  List<Object?> get props => [
+        id,
+        title,
+        emoji,
+        targetAmount,
+        currentAmount,
+        deadline,
+        colorIndex,
+        updatedAt,
+      ];
 }

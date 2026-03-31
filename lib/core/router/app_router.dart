@@ -1,36 +1,34 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
+import '../../features/ai_insights/presentation/pages/ai_insights_page.dart';
+import '../../features/analytics/presentation/pages/analytics_page.dart';
 import '../../features/auth/presentation/pages/auth_landing_page.dart';
-import '../../features/auth/presentation/pages/profile_setup_page.dart';
-import '../../features/auth/presentation/pages/pin_setup_page.dart';
-import '../../features/auth/presentation/pages/pin_entry_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
+import '../../features/auth/presentation/pages/pin_entry_page.dart';
+import '../../features/auth/presentation/pages/pin_setup_page.dart';
+import '../../features/auth/presentation/pages/profile_setup_page.dart';
 import '../../features/auth/presentation/pages/register_page.dart';
 import '../../features/auth/presentation/pages/verify_email_page.dart';
 import '../../features/auth/presentation/providers/auth_provider.dart';
 import '../../features/auth/presentation/providers/cloud_auth_provider.dart';
-import '../../features/dashboard/presentation/pages/dashboard_page.dart';
-import '../../features/expenses/presentation/pages/expenses_page.dart';
-import '../../features/expenses/presentation/pages/add_expense_page.dart';
-import '../../features/groups/presentation/pages/groups_page.dart';
-import '../../features/groups/presentation/pages/group_detail_page.dart';
-import '../../features/groups/presentation/pages/create_group_page.dart';
-import '../../features/groups/presentation/pages/add_group_expense_page.dart';
-import '../../features/budgets/presentation/pages/budgets_page.dart';
 import '../../features/budgets/presentation/pages/add_budget_page.dart';
-import '../../features/analytics/presentation/pages/analytics_page.dart';
-import '../../features/settings/presentation/pages/settings_page.dart';
-import '../../features/expenses/presentation/pages/edit_expense_page.dart';
-import '../../features/expenses/presentation/pages/recurring_manager_page.dart';
-import '../../features/expenses/presentation/pages/expense_detail_page.dart';
-import '../../features/goals/presentation/pages/goals_page.dart';
-import '../../features/investments/presentation/pages/investments_page.dart';
-import '../../features/investments/presentation/pages/add_investment_page.dart';
-import '../../features/ai_insights/presentation/pages/ai_insights_page.dart';
-import '../../features/investments/domain/entities/investment.dart';
+import '../../features/budgets/presentation/pages/budgets_page.dart';
+import '../../features/dashboard/presentation/pages/dashboard_page.dart';
 import '../../features/expenses/domain/entities/expense.dart';
+import '../../features/expenses/presentation/pages/add_expense_page.dart';
+import '../../features/expenses/presentation/pages/edit_expense_page.dart';
+import '../../features/expenses/presentation/pages/expense_detail_page.dart';
+import '../../features/expenses/presentation/pages/expenses_page.dart';
+import '../../features/expenses/presentation/pages/recurring_manager_page.dart';
 import '../../features/export/presentation/pages/export_page.dart';
+import '../../features/goals/presentation/pages/goals_page.dart';
+import '../../features/groups/presentation/pages/add_group_expense_page.dart';
+import '../../features/groups/presentation/pages/create_group_page.dart';
+import '../../features/groups/presentation/pages/group_detail_page.dart';
+import '../../features/groups/presentation/pages/groups_page.dart';
+import '../../features/settings/presentation/pages/settings_page.dart';
 import '../../shared/widgets/adaptive_scaffold.dart';
 
 // Route path constants
@@ -59,8 +57,6 @@ abstract class AppRoutes {
   static const String recurringManager = '/expenses/recurring';
   static const String expenseDetail = '/expenses/detail';
   static const String goals = '/goals';
-  static const String investments = '/investments';
-  static const String addInvestment = '/investments/add';
   static const String aiInsights = '/ai-insights';
 }
 
@@ -232,11 +228,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             pageBuilder: (context, state) =>
                 _fadeSlide(key: state.pageKey, child: const SettingsPage()),
           ),
-          GoRoute(
-            path: AppRoutes.investments,
-            pageBuilder: (context, state) =>
-                _fadeSlide(key: state.pageKey, child: const InvestmentsPage()),
-          ),
         ],
       ),
       // Full-screen routes (outside shell)
@@ -283,15 +274,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         pageBuilder: (context, state) => _slideUp(
           key: state.pageKey,
           child: const GoalsPage(),
-        ),
-      ),
-      GoRoute(
-        path: AppRoutes.addInvestment,
-        pageBuilder: (context, state) => _slideUp(
-          key: state.pageKey,
-          child: AddInvestmentPage(
-            existing: state.extra as Investment?,
-          ),
         ),
       ),
       GoRoute(

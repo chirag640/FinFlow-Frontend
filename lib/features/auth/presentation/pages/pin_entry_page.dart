@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/router/app_router.dart';
@@ -24,6 +25,7 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
   int _attempts = 0;
   DateTime? _lockoutUntil;
   bool _biometricAvailable = false;
+  bool _biometricInProgress = false;
 
   @override
   void initState() {
@@ -41,9 +43,19 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
   }
 
   Future<void> _tryBiometric() async {
+    if (_biometricInProgress) return;
+    _biometricInProgress = true;
     final success = await BiometricService.authenticate();
+    _biometricInProgress = false;
     if (!mounted) return;
-    if (success) context.go(AppRoutes.dashboard);
+    if (success) {
+      ref.read(authStateProvider.notifier).unlockWithBiometric();
+      context.go(AppRoutes.dashboard);
+      return;
+    }
+    setState(() {
+      _error = 'Biometric unlock failed. Please try PIN.';
+    });
   }
 
   void _onDigit(String digit) {
@@ -105,9 +117,14 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
   Widget build(BuildContext context) {
     R.init(context);
     final user = ref.watch(currentUserProvider);
+    final colors = Theme.of(context).colorScheme;
+    final surface = colors.surface;
+    final textPrimary = colors.onSurface;
+    final textSecondary = colors.onSurfaceVariant;
+    final border = colors.outlineVariant;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: surface,
       body: SafeArea(
         child: Column(
           children: [
@@ -119,7 +136,7 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
               style: TextStyle(
                 fontSize: R.t(26),
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: textPrimary,
                 letterSpacing: -0.5,
                 height: 1.2,
               ),
@@ -128,8 +145,7 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
             SizedBox(height: R.sm),
             Text(
               'Enter your PIN to continue',
-              style:
-                  TextStyle(fontSize: R.t(15), color: AppColors.textSecondary),
+              style: TextStyle(fontSize: R.t(15), color: textSecondary),
             ),
             SizedBox(height: R.s(40)),
             // PIN dots
@@ -150,7 +166,7 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
                           ? AppColors.error
                           : filled
                               ? AppColors.primary
-                              : AppColors.border,
+                              : border,
                     ),
                   );
                 }),

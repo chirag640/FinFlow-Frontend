@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -18,19 +19,20 @@ class ExpenseDetailPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: const BackButton(color: AppColors.textPrimary),
+        leading: BackButton(color: colorScheme.onSurface),
         title: Text(
           'Expense Detail',
           style: TextStyle(
               fontSize: R.t(18),
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary),
+              color: colorScheme.onSurface),
         ),
         actions: [
           IconButton(
@@ -245,7 +247,7 @@ class _DetailCard extends StatelessWidget {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -289,7 +291,7 @@ class _DetailRow extends StatelessWidget {
             width: R.s(36),
             height: R.s(36),
             decoration: BoxDecoration(
-              color: AppColors.surfaceVariant,
+              color: Theme.of(context).colorScheme.surfaceContainerHighest,
               borderRadius: BorderRadius.circular(R.sm),
             ),
             child: Icon(icon, size: R.s(18), color: AppColors.textSecondary),

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../../../../core/design/app_colors.dart';
+
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/financial_summary.dart';
@@ -71,12 +71,13 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.all(R.s(14)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(R.s(14)),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -88,7 +89,7 @@ class _StatCard extends StatelessWidget {
             style: TextStyle(
               fontSize: R.t(16),
               fontWeight: FontWeight.w800,
-              color: AppColors.textPrimary,
+              color: colors.onSurface,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
@@ -98,7 +99,7 @@ class _StatCard extends StatelessWidget {
             label,
             style: TextStyle(
               fontSize: R.t(11),
-              color: AppColors.textTertiary,
+              color: colors.onSurfaceVariant,
             ),
           ),
         ],

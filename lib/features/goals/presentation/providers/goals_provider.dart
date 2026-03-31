@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../../../core/providers/settings_provider.dart';
 import '../../../../../core/services/notification_service.dart';
 import '../../data/datasources/goal_local_datasource.dart';
@@ -87,7 +88,7 @@ class GoalsNotifier extends StateNotifier<GoalsState> {
   }
 
   Future<void> updateGoal(SavingsGoal goal) async {
-    await _ds.save(goal);
+    await _ds.save(goal.copyWith(updatedAt: DateTime.now()));
     _load();
   }
 

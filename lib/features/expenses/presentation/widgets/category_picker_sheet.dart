@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../../../../core/design/app_colors.dart';
+
 import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/expense_category.dart';
 
@@ -17,6 +17,8 @@ class CategoryPickerSheet extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
     return DraggableScrollableSheet(
       expand: false,
       initialChildSize: 0.55,
@@ -34,14 +36,14 @@ class CategoryPickerSheet extends StatelessWidget {
                   style: TextStyle(
                     fontSize: R.t(18),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close_rounded),
                   onPressed: () => Navigator.of(context).pop(),
                   style: IconButton.styleFrom(
-                    backgroundColor: AppColors.surfaceVariant,
+                    backgroundColor: colorScheme.surfaceContainerHighest,
                   ),
                 ),
               ],
@@ -72,10 +74,11 @@ class CategoryPickerSheet extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: isSelected
                           ? cat.color.withValues(alpha: 0.15)
-                          : AppColors.surfaceVariant,
+                          : colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(R.s(14)),
                       border: Border.all(
-                        color: isSelected ? cat.color : AppColors.border,
+                        color:
+                            isSelected ? cat.color : colorScheme.outlineVariant,
                         width: isSelected ? R.s(2) : 1,
                       ),
                     ),
@@ -94,7 +97,7 @@ class CategoryPickerSheet extends StatelessWidget {
                             fontWeight: FontWeight.w600,
                             color: isSelected
                                 ? cat.color
-                                : AppColors.textSecondary,
+                                : colorScheme.onSurfaceVariant,
                           ),
                           textAlign: TextAlign.center,
                           maxLines: 2,

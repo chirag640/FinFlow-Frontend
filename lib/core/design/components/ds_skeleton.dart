@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:shimmer/shimmer.dart';
-import '../app_colors.dart';
-import '../app_radius.dart';
+
 import '../../utils/responsive.dart';
+import '../app_radius.dart';
 
 class DSSkeletonBox extends StatelessWidget {
   final double? width;
@@ -19,14 +19,15 @@ class DSSkeletonBox extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Shimmer.fromColors(
-      baseColor: AppColors.surfaceVariant,
-      highlightColor: AppColors.surface,
+      baseColor: colors.surfaceContainerHighest,
+      highlightColor: colors.surface,
       child: Container(
         width: width,
         height: height,
         decoration: BoxDecoration(
-          color: AppColors.surfaceVariant,
+          color: colors.surfaceContainerHighest,
           borderRadius: borderRadius ?? AppRadius.smAll,
         ),
       ),
@@ -43,16 +44,17 @@ class DSSkeletonCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Shimmer.fromColors(
-      baseColor: AppColors.surfaceVariant,
-      highlightColor: AppColors.surface,
+      baseColor: colors.surfaceContainerHighest,
+      highlightColor: colors.surface,
       child: Container(
         height: height,
         width: width ?? double.infinity,
         decoration: BoxDecoration(
-          color: AppColors.surfaceVariant,
+          color: colors.surfaceContainerHighest,
           borderRadius: AppRadius.lgAll,
-          border: Border.all(color: AppColors.border),
+          border: Border.all(color: colors.outlineVariant),
         ),
       ),
     );
@@ -65,9 +67,10 @@ class DSSkeletonTransactionTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Shimmer.fromColors(
-      baseColor: AppColors.surfaceVariant,
-      highlightColor: AppColors.surface,
+      baseColor: colors.surfaceContainerHighest,
+      highlightColor: colors.surface,
       child: Padding(
         padding: EdgeInsets.symmetric(vertical: R.s(10)),
         child: Row(
@@ -76,7 +79,7 @@ class DSSkeletonTransactionTile extends StatelessWidget {
               width: R.s(44),
               height: R.s(44),
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
+                color: colors.surfaceContainerHighest,
                 borderRadius: AppRadius.mdAll,
               ),
             ),
@@ -89,7 +92,7 @@ class DSSkeletonTransactionTile extends StatelessWidget {
                     height: R.s(13),
                     width: R.s(140),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceVariant,
+                      color: colors.surfaceContainerHighest,
                       borderRadius: AppRadius.smAll,
                     ),
                   ),
@@ -98,7 +101,7 @@ class DSSkeletonTransactionTile extends StatelessWidget {
                     height: R.s(11),
                     width: R.s(80),
                     decoration: BoxDecoration(
-                      color: AppColors.surfaceVariant,
+                      color: colors.surfaceContainerHighest,
                       borderRadius: AppRadius.smAll,
                     ),
                   ),
@@ -110,7 +113,7 @@ class DSSkeletonTransactionTile extends StatelessWidget {
               height: R.s(14),
               width: R.s(60),
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
+                color: colors.surfaceContainerHighest,
                 borderRadius: AppRadius.smAll,
               ),
             ),

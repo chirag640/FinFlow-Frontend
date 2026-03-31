@@ -1,14 +1,15 @@
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
-import 'package:dio/dio.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
-import '../../../../core/router/app_router.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/providers/settings_provider.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
@@ -53,13 +54,21 @@ class GroupDetailPage extends ConsumerWidget {
 
     final balances = expState.netBalances(group.currentUserId);
     final settlements = simplifyDebts(balances);
+    final totalSpent = expState.expenses.fold<double>(
+      0,
+      (sum, expense) => sum + expense.amount,
+    );
+    final myGetBack = expState.myTotalOwing(group.currentUserId);
+    final myOwe = expState.myTotalOwed(group.currentUserId);
+    final myNet = myGetBack - myOwe;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surface,
       body: NestedScrollView(
         headerSliverBuilder: (context, _) => [
           SliverAppBar(
-            backgroundColor: AppColors.surface,
+            backgroundColor: colorScheme.surface,
             pinned: true,
             elevation: 0,
             scrolledUnderElevation: 0,
@@ -69,24 +78,46 @@ class GroupDetailPage extends ConsumerWidget {
             ),
             title: Row(
               children: [
-                Text(group.emoji, style: TextStyle(fontSize: R.t(22))),
+                Hero(
+                  tag: 'group-avatar-${group.id}',
+                  child: Material(
+                    type: MaterialType.transparency,
+                    child: Container(
+                      width: R.s(34),
+                      height: R.s(34),
+                      decoration: BoxDecoration(
+                        color: colorScheme.primaryContainer,
+                        borderRadius: BorderRadius.circular(R.s(10)),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(group.emoji,
+                          style: TextStyle(fontSize: R.t(18))),
+                    ),
+                  ),
+                ),
                 SizedBox(width: R.sm),
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      group.name,
-                      style: TextStyle(
-                        fontSize: R.t(17),
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                    Hero(
+                      tag: 'group-name-${group.id}',
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: Text(
+                          group.name,
+                          style: TextStyle(
+                            fontSize: R.t(17),
+                            fontWeight: FontWeight.w700,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
                       ),
                     ),
                     Text(
                       '${group.members.length} members',
                       style: TextStyle(
                         fontSize: R.t(12),
-                        color: AppColors.textTertiary,
+                        color: colorScheme.onSurfaceVariant,
                       ),
                     ),
                   ],
@@ -144,10 +175,18 @@ class GroupDetailPage extends ConsumerWidget {
                 ),
               )
             : SingleChildScrollView(
-                padding: EdgeInsets.all(R.s(20)),
+                padding: EdgeInsets.all(R.s(16)),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    _StatRow(
+                      totalSpent: totalSpent,
+                      memberCount: group.members.length,
+                      myGetBack: myGetBack,
+                      myOwe: myOwe,
+                      myNet: myNet,
+                    ),
+                    SizedBox(height: R.s(16)),
                     if (settlements.isNotEmpty) ...[
                       DebtSummaryWidget(
                         settlements: settlements,
@@ -157,49 +196,56 @@ class GroupDetailPage extends ConsumerWidget {
                       ),
                       SizedBox(height: R.s(20)),
                     ],
-                    // Total stats
-                    _StatRow(
-                      totalSpent: expState.expenses.fold(
-                        0.0,
-                        (s, e) => s + e.amount,
-                      ),
-                      memberCount: group.members.length,
-                    ),
-                    SizedBox(height: R.s(20)),
                     Text(
                       'TRANSACTIONS',
                       style: TextStyle(
                         fontSize: R.t(11),
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textTertiary,
+                        color: colorScheme.onSurfaceVariant,
                         letterSpacing: 1.2,
                       ),
                     ),
                     SizedBox(height: R.s(10)),
                     Container(
                       decoration: BoxDecoration(
-                        color: AppColors.surface,
+                        color: colorScheme.surface,
                         borderRadius: BorderRadius.circular(R.md),
-                        border: Border.all(color: AppColors.border),
+                        border: Border.all(color: colorScheme.outlineVariant),
                       ),
                       child: ListView.separated(
+                        primary: false,
+                        padding: EdgeInsets.zero,
                         physics: const NeverScrollableScrollPhysics(),
                         shrinkWrap: true,
                         itemCount: expState.expenses.length,
-                        separatorBuilder: (_, __) => const Divider(
+                        separatorBuilder: (_, __) => Divider(
                           height: 1,
                           indent: 16,
-                          color: AppColors.border,
+                          color: colorScheme.outlineVariant,
                         ),
                         itemBuilder: (ctx, i) {
                           final exp = expState.expenses[i];
-                          final payer = group.members.firstWhere(
-                            (m) => m.id == exp.paidByMemberId,
-                            orElse: () => group.members.first,
-                          );
+                          final payer = group.members.isEmpty
+                              ? null
+                              : group.members.firstWhere(
+                                  (m) => m.id == exp.paidByMemberId,
+                                  orElse: () => group.members.first,
+                                );
+                          final payerHandle = payer?.handle ?? '@unknown';
 
                           // Settlement expenses — shown as read-only green tiles
                           if (exp.isSettlement) {
+                            final payeeId = exp.shares.isNotEmpty
+                                ? exp.shares.first.memberId
+                                : null;
+                            final payee =
+                                payeeId == null || group.members.isEmpty
+                                    ? null
+                                    : group.members.firstWhere(
+                                        (m) => m.id == payeeId,
+                                        orElse: () => group.members.first,
+                                      );
+                            final payeeHandle = payee?.handle ?? '@unknown';
                             return ListTile(
                               key: Key(exp.id),
                               contentPadding: EdgeInsets.symmetric(
@@ -210,7 +256,7 @@ class GroupDetailPage extends ConsumerWidget {
                                 width: R.s(44),
                                 height: R.s(44),
                                 decoration: BoxDecoration(
-                                  color: AppColors.successLight,
+                                  color: colorScheme.tertiaryContainer,
                                   borderRadius: BorderRadius.circular(R.s(12)),
                                 ),
                                 child: Center(
@@ -225,14 +271,14 @@ class GroupDetailPage extends ConsumerWidget {
                                 style: TextStyle(
                                   fontSize: R.t(14),
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.success,
+                                  color: colorScheme.tertiary,
                                 ),
                               ),
                               subtitle: Text(
-                                'Settlement · ${exp.date.day}/${exp.date.month}',
+                                'Settlement $payerHandle → $payeeHandle · ${exp.date.day}/${exp.date.month}',
                                 style: TextStyle(
                                   fontSize: R.t(12),
-                                  color: AppColors.textTertiary,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                               ),
                               trailing: Text(
@@ -240,7 +286,7 @@ class GroupDetailPage extends ConsumerWidget {
                                 style: TextStyle(
                                   fontSize: R.t(15),
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.success,
+                                  color: colorScheme.tertiary,
                                 ),
                               ),
                             )
@@ -255,10 +301,10 @@ class GroupDetailPage extends ConsumerWidget {
                             background: Container(
                               alignment: Alignment.centerRight,
                               padding: EdgeInsets.only(right: R.s(20)),
-                              color: AppColors.errorLight,
-                              child: const Icon(
+                              color: colorScheme.errorContainer,
+                              child: Icon(
                                 Icons.delete_outline_rounded,
-                                color: AppColors.error,
+                                color: colorScheme.onErrorContainer,
                               ),
                             ),
                             confirmDismiss: (_) async => await showDialog<bool>(
@@ -305,7 +351,7 @@ class GroupDetailPage extends ConsumerWidget {
                                 width: R.s(44),
                                 height: R.s(44),
                                 decoration: BoxDecoration(
-                                  color: AppColors.primaryExtraLight,
+                                  color: colorScheme.primaryContainer,
                                   borderRadius: BorderRadius.circular(R.s(12)),
                                 ),
                                 child: Center(
@@ -320,14 +366,14 @@ class GroupDetailPage extends ConsumerWidget {
                                 style: TextStyle(
                                   fontSize: R.t(14),
                                   fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
+                                  color: colorScheme.onSurface,
                                 ),
                               ),
                               subtitle: Text(
-                                'Paid by ${payer.name} · ${exp.date.day}/${exp.date.month}',
+                                'Paid by $payerHandle · ${exp.shares.length} split · ${exp.date.day}/${exp.date.month}',
                                 style: TextStyle(
                                   fontSize: R.t(12),
-                                  color: AppColors.textTertiary,
+                                  color: colorScheme.onSurfaceVariant,
                                 ),
                               ),
                               trailing: Text(
@@ -335,7 +381,7 @@ class GroupDetailPage extends ConsumerWidget {
                                 style: TextStyle(
                                   fontSize: R.t(15),
                                   fontWeight: FontWeight.w700,
-                                  color: AppColors.textPrimary,
+                                  color: colorScheme.onSurface,
                                 ),
                               ),
                             ),
@@ -349,14 +395,11 @@ class GroupDetailPage extends ConsumerWidget {
                 ),
               ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
+      floatingActionButton: FloatingActionButton.small(
         onPressed: () =>
             context.push(AppRoutes.addGroupExpense.replaceAll(':id', groupId)),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(
-          'Add Expense',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
+        tooltip: 'Add expense',
+        child: const Icon(Icons.add_rounded),
       ),
     );
   }
@@ -365,60 +408,193 @@ class GroupDetailPage extends ConsumerWidget {
 class _StatRow extends StatelessWidget {
   final double totalSpent;
   final int memberCount;
-  const _StatRow({required this.totalSpent, required this.memberCount});
+  final double myGetBack;
+  final double myOwe;
+  final double myNet;
+
+  const _StatRow({
+    required this.totalSpent,
+    required this.memberCount,
+    required this.myGetBack,
+    required this.myOwe,
+    required this.myNet,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Group overview',
+            style: TextStyle(
+              fontSize: R.t(12),
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurfaceVariant,
+              letterSpacing: 0.4,
+            ),
+          ),
+          SizedBox(height: R.s(8)),
+          Row(
+            children: [
+              Expanded(
+                child: _StatItem(
+                  label: 'Total spent',
+                  value: CurrencyFormatter.format(totalSpent),
+                  color: colorScheme.onSurface,
+                ),
+              ),
+              Expanded(
+                child: _StatItem(
+                  label: 'Per person',
+                  value: CurrencyFormatter.format(
+                    memberCount > 0 ? totalSpent / memberCount : 0,
+                  ),
+                  color: colorScheme.primary,
+                ),
+              ),
+              Expanded(
+                child: _StatItem(
+                  label: 'Your net',
+                  value: CurrencyFormatter.format(myNet.abs()),
+                  color: myNet >= 0 ? AppColors.income : colorScheme.error,
+                  helper: myNet >= 0 ? 'you get back' : 'you owe',
+                ),
+              ),
+            ],
+          ),
+          SizedBox(height: R.s(12)),
+          Row(
+            children: [
+              Expanded(
+                child: _AmountBadge(
+                  label: 'You get',
+                  amount: myGetBack,
+                  bg: colorScheme.tertiaryContainer,
+                  color: AppColors.income,
+                ),
+              ),
+              SizedBox(width: R.s(10)),
+              Expanded(
+                child: _AmountBadge(
+                  label: 'You owe',
+                  amount: myOwe,
+                  bg: colorScheme.errorContainer,
+                  color: colorScheme.error,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _StatItem extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color color;
+  final String? helper;
+
+  const _StatItem({
+    required this.label,
+    required this.value,
+    required this.color,
+    this.helper,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          style:
+              TextStyle(fontSize: R.t(11), color: colorScheme.onSurfaceVariant),
+        ),
+        SizedBox(height: R.s(2)),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: R.t(17),
+            fontWeight: FontWeight.w800,
+            color: color,
+          ),
+        ),
+        if (helper != null)
+          Text(
+            helper!,
+            style: TextStyle(
+              fontSize: R.t(10),
+              color: colorScheme.onSurfaceVariant,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+class _AmountBadge extends StatelessWidget {
+  final String label;
+  final double amount;
+  final Color bg;
+  final Color color;
+
+  const _AmountBadge({
+    required this.label,
+    required this.amount,
+    required this.bg,
+    required this.color,
+  });
 
   @override
   Widget build(BuildContext context) {
     R.init(context);
     return Container(
-      padding: EdgeInsets.all(R.md),
+      padding: EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(10)),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
-        borderRadius: BorderRadius.circular(R.s(14)),
+        color: bg,
+        borderRadius: BorderRadius.circular(R.s(12)),
       ),
       child: Row(
         children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Total Spent',
-                  style: TextStyle(
-                      fontSize: R.t(12), color: AppColors.textTertiary),
-                ),
-                SizedBox(height: R.s(2)),
-                Text(
-                  CurrencyFormatter.format(totalSpent),
-                  style: TextStyle(
-                    fontSize: R.t(20),
-                    fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
-                  ),
-                ),
-              ],
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: R.t(11),
+              color: color,
+              fontWeight: FontWeight.w700,
             ),
           ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                'Per Person',
-                style:
-                    TextStyle(fontSize: R.t(12), color: AppColors.textTertiary),
-              ),
-              SizedBox(height: R.s(2)),
-              Text(
-                CurrencyFormatter.format(
-                  memberCount > 0 ? totalSpent / memberCount : 0,
-                ),
-                style: TextStyle(
-                  fontSize: R.t(20),
-                  fontWeight: FontWeight.w800,
-                  color: AppColors.primary,
-                ),
-              ),
-            ],
+          const Spacer(),
+          Text(
+            CurrencyFormatter.format(amount),
+            style: TextStyle(
+              fontSize: R.t(12),
+              color: color,
+              fontWeight: FontWeight.w800,
+            ),
           ),
         ],
       ),
@@ -488,7 +664,9 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
     return AlertDialog(
+      backgroundColor: colorScheme.surface,
       title: const Text('Add member'),
       content: SizedBox(
         width: double.maxFinite,
@@ -499,6 +677,16 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
               controller: _ctrl,
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
+              onChanged: (_) {
+                if (_ctrl.text.trim().length >= 2) {
+                  _search();
+                } else {
+                  setState(() {
+                    _results = [];
+                    _searched = false;
+                  });
+                }
+              },
               decoration: InputDecoration(
                 hintText: 'Search by username (e.g. chirag19)',
                 prefixIcon: const Icon(Icons.person_search_outlined),
@@ -517,11 +705,19 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                 padding: EdgeInsets.all(16),
                 child: CircularProgressIndicator(),
               )
-            else if (_searched && _results.isEmpty)
+            else if (_ctrl.text.trim().isNotEmpty &&
+                _ctrl.text.trim().length < 2)
               const Padding(
                 padding: EdgeInsets.all(8),
-                child: Text('No users found.',
-                    style: TextStyle(color: Colors.grey)),
+                child: Text('Type at least 2 characters to search.'),
+              )
+            else if (_searched && _results.isEmpty)
+              Padding(
+                padding: EdgeInsets.all(8),
+                child: Text(
+                  'No users found.',
+                  style: TextStyle(color: colorScheme.onSurfaceVariant),
+                ),
               )
             else if (_results.isNotEmpty)
               ConstrainedBox(
@@ -537,6 +733,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                       ),
                       title: Text('@${user['username'] ?? ''}'),
                       subtitle: Text(user['name'] as String? ?? ''),
+                      trailing: const Icon(Icons.add_rounded),
                       onTap: () => _addUser(user),
                     );
                   },

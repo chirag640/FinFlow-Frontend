@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../core/design/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../core/utils/responsive.dart';
@@ -35,12 +36,6 @@ class AdaptiveScaffold extends StatelessWidget {
       route: AppRoutes.budgets,
     ),
     _NavItem(
-      icon: Icons.trending_up_outlined,
-      activeIcon: Icons.trending_up_rounded,
-      label: 'Investments',
-      route: AppRoutes.investments,
-    ),
-    _NavItem(
       icon: Icons.settings_outlined,
       activeIcon: Icons.settings_rounded,
       label: 'Settings',
@@ -53,8 +48,7 @@ class AdaptiveScaffold extends StatelessWidget {
     if (loc.startsWith(AppRoutes.expenses)) return 1;
     if (loc.startsWith(AppRoutes.groups)) return 2;
     if (loc.startsWith(AppRoutes.budgets)) return 3;
-    if (loc.startsWith(AppRoutes.investments)) return 4;
-    if (loc.startsWith(AppRoutes.settings)) return 5;
+    if (loc.startsWith(AppRoutes.settings)) return 4;
     return 0;
   }
 
@@ -63,10 +57,11 @@ class AdaptiveScaffold extends StatelessWidget {
     R.init(context);
     final screenSize = Responsive.of(context);
     final selectedIndex = _selectedIndex(context);
+    final colors = Theme.of(context).colorScheme;
 
     if (screenSize == ScreenSize.mobile) {
       return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
         body: Column(
           children: [
             const ConnectivityBanner(),
@@ -95,7 +90,7 @@ class AdaptiveScaffold extends StatelessWidget {
     // Tablet / Desktop — NavigationRail
     final extended = screenSize == ScreenSize.desktop;
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Row(
         children: [
           NavigationRail(
@@ -134,7 +129,7 @@ class AdaptiveScaffold extends StatelessWidget {
                       style: TextStyle(
                         fontSize: R.t(16),
                         fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+                        color: colors.onSurface,
                       ),
                     ),
                   ],

@@ -4,15 +4,16 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
+import '../../../sync/presentation/providers/sync_provider.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/entities/expense_category.dart';
 import '../providers/expense_provider.dart';
-import '../../../sync/presentation/providers/sync_provider.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/recurring_section_widget.dart';
 
@@ -109,8 +110,9 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
       clearRecurring: !_isRecurring,
     );
     await ref.read(expenseProvider.notifier).updateExpense(updated);
-    syncNotifier
-        .sync(); // offline fallback — no-op if API call above already succeeded
+    syncNotifier.scheduleSync(
+      reason: 'expense-updated',
+    ); // offline fallback without immediate full-sync pressure
     if (mounted) {
       HapticFeedback.lightImpact();
       context.pop();
@@ -120,10 +122,12 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
           onPressed: () => context.pop(),
@@ -152,7 +156,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
             Container(
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Row(
@@ -267,7 +271,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                   vertical: R.s(14),
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(R.s(14)),
                 ),
                 child: Row(
@@ -318,7 +322,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                   vertical: R.s(14),
                 ),
                 decoration: BoxDecoration(
-                  color: AppColors.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                   borderRadius: BorderRadius.circular(R.s(14)),
                 ),
                 child: Row(
@@ -409,7 +413,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
           fontSize: R.t(15),
         ),
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(14)),
           borderSide: BorderSide.none,
@@ -444,7 +448,9 @@ class _TypeTab extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: EdgeInsets.symmetric(vertical: R.s(10)),
           decoration: BoxDecoration(
-            color: selected ? AppColors.surface : Colors.transparent,
+            color: selected
+                ? Theme.of(context).colorScheme.surface
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(R.s(10)),
             boxShadow: selected
                 ? [

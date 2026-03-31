@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import '../app_colors.dart';
+
 import '../../utils/responsive.dart';
+import '../app_colors.dart';
 
 class DSEmptyState extends StatelessWidget {
   final String emoji;
@@ -22,6 +23,7 @@ class DSEmptyState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: R.s(40), vertical: R.xl),
@@ -39,7 +41,7 @@ class DSEmptyState extends StatelessWidget {
               style: TextStyle(
                 fontSize: R.t(18),
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: colors.onSurface,
               ),
               textAlign: TextAlign.center,
             )
@@ -52,7 +54,7 @@ class DSEmptyState extends StatelessWidget {
               style: TextStyle(
                 fontSize: R.t(14),
                 fontWeight: FontWeight.w400,
-                color: AppColors.textSecondary,
+                color: colors.onSurfaceVariant,
                 height: 1.5,
               ),
               textAlign: TextAlign.center,
@@ -97,6 +99,7 @@ class DSErrorState extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Center(
       child: Padding(
         padding: EdgeInsets.all(R.xl),
@@ -110,7 +113,7 @@ class DSErrorState extends StatelessWidget {
               style: TextStyle(
                 fontSize: R.t(16),
                 fontWeight: FontWeight.w600,
-                color: AppColors.textPrimary,
+                color: colors.onSurface,
               ),
               textAlign: TextAlign.center,
             ),

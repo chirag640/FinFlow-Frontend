@@ -7,15 +7,17 @@ class Budget extends Equatable {
   final int month; // 1-12
   final int year;
   final bool carryForward;
+  final DateTime updatedAt;
 
-  const Budget({
+  Budget({
     required this.id,
     required this.categoryKey,
     required this.allocatedAmount,
     required this.month,
     required this.year,
     this.carryForward = false,
-  });
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   Budget copyWith({
     String? id,
@@ -24,6 +26,7 @@ class Budget extends Equatable {
     int? month,
     int? year,
     bool? carryForward,
+    DateTime? updatedAt,
   }) =>
       Budget(
         id: id ?? this.id,
@@ -32,6 +35,7 @@ class Budget extends Equatable {
         month: month ?? this.month,
         year: year ?? this.year,
         carryForward: carryForward ?? this.carryForward,
+        updatedAt: updatedAt ?? DateTime.now(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -41,6 +45,7 @@ class Budget extends Equatable {
         'month': month,
         'year': year,
         'carryForward': carryForward,
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory Budget.fromJson(Map<String, dynamic> json) => Budget(
@@ -50,9 +55,17 @@ class Budget extends Equatable {
         month: json['month'] as int,
         year: json['year'] as int,
         carryForward: json['carryForward'] as bool? ?? false,
+        updatedAt: _parseDateTime(json['updatedAt']) ?? DateTime.now(),
       );
+
+  static DateTime? _parseDateTime(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
 
   @override
   List<Object?> get props =>
-      [id, categoryKey, allocatedAmount, month, year, carryForward];
+      [id, categoryKey, allocatedAmount, month, year, carryForward, updatedAt];
 }

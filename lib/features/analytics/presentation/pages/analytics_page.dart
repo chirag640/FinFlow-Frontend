@@ -5,6 +5,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../expenses/domain/entities/expense.dart';
@@ -24,6 +25,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     final expState = ref.watch(expenseProvider);
 
     // All non-income expenses for the selected year
@@ -61,20 +63,20 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
     });
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: CustomScrollView(
         slivers: [
           // ── AppBar ────────────────────────────────────────────────────────
           SliverAppBar(
             pinned: true,
-            backgroundColor: AppColors.background,
+            backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
             surfaceTintColor: Colors.transparent,
             toolbarHeight: 64,
             titleSpacing: 4,
             actionsPadding: const EdgeInsets.only(right: 8),
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded,
-                  color: AppColors.textPrimary),
+              icon: Icon(Icons.arrow_back_ios_new_rounded,
+                  color: colors.onSurface),
               onPressed: () => Navigator.of(context).pop(),
             ),
             centerTitle: true,
@@ -82,7 +84,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               'Finance Analytics',
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: colors.onSurface,
                     letterSpacing: -0.5,
                   ),
             ),
@@ -100,17 +102,17 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                   padding: EdgeInsets.symmetric(
                       horizontal: R.s(12), vertical: R.s(6)),
                   decoration: BoxDecoration(
-                    color: AppColors.primaryExtraLight,
+                    color: colors.primaryContainer,
                     borderRadius: BorderRadius.circular(R.sm),
                   ),
                   child: Row(children: [
                     Text('$_selectedYear',
-                        style: const TextStyle(
-                            color: AppColors.primary,
+                        style: TextStyle(
+                            color: colors.onPrimaryContainer,
                             fontWeight: FontWeight.w700)),
                     Gap(R.xs),
                     Icon(Icons.expand_more_rounded,
-                        size: R.s(18), color: AppColors.primary),
+                        size: R.s(18), color: colors.onPrimaryContainer),
                   ]),
                 ),
               ),
@@ -209,7 +211,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 Text(
                   '$_selectedYear · tap a cell to see the day\'s total',
                   style: TextStyle(
-                      fontSize: R.t(11), color: AppColors.textTertiary),
+                      fontSize: R.t(11), color: colors.onSurfaceVariant),
                 ),
                 const Gap(12),
                 _SpendingHeatmap(
@@ -224,7 +226,7 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 Text(
                   '$_selectedYear · avg spend per day',
                   style: TextStyle(
-                      fontSize: R.t(11), color: AppColors.textTertiary),
+                      fontSize: R.t(11), color: colors.onSurfaceVariant),
                 ),
                 const Gap(12),
                 _DayOfWeekChart(expenses: yearExpenses)
@@ -311,7 +313,7 @@ class _CategoryPieSection extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(R.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -406,7 +408,7 @@ class _MonthlyBarChart extends StatelessWidget {
       height: R.s(200),
       padding: EdgeInsets.fromLTRB(R.sm, R.md, R.sm, 0),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -501,7 +503,7 @@ class _IncomeVsExpenseChart extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(R.sm, R.md, R.sm, R.sm),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -637,7 +639,7 @@ class _CategoryRow extends StatelessWidget {
       margin: EdgeInsets.only(bottom: R.sm),
       padding: EdgeInsets.symmetric(horizontal: R.s(14), vertical: R.s(12)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.s(12)),
         border: Border.all(color: AppColors.border),
       ),
@@ -712,7 +714,7 @@ class _RecurringBreakdown extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(R.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -925,7 +927,7 @@ class _CategoryTrendChart extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(R.sm, R.md, R.md, R.sm),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -1167,7 +1169,7 @@ class _SpendingHeatmapState extends State<_SpendingHeatmap> {
     return Container(
       padding: EdgeInsets.all(R.s(14)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -1301,7 +1303,7 @@ class _DayOfWeekChart extends StatelessWidget {
     return Container(
       padding: EdgeInsets.fromLTRB(R.sm, R.md, R.md, R.sm),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),

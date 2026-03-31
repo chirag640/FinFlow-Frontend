@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
 import '../../../../core/router/app_router.dart';
@@ -19,23 +20,24 @@ class RecurringManagerPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     final all = ref.watch(expenseProvider).expenses;
     final templates = all.where((e) => e.isRecurring && !e.isIncome).toList()
       ..sort((a, b) => a.category.name.compareTo(b.category.name));
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: const BackButton(color: AppColors.textPrimary),
+        leading: BackButton(color: colorScheme.onSurface),
         title: Text(
           'Recurring Expenses',
           style: TextStyle(
             fontSize: R.t(18),
             fontWeight: FontWeight.w700,
-            color: AppColors.textPrimary,
+            color: colorScheme.onSurface,
           ),
         ),
         bottom: PreferredSize(
@@ -157,7 +159,7 @@ class _RecurringTile extends ConsumerWidget {
         ),
       ),
       child: Material(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         elevation: 0,
         child: InkWell(

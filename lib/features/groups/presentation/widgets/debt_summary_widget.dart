@@ -1,9 +1,11 @@
-﻿import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
+
 import '../../../../core/design/app_colors.dart';
-import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/currency_formatter.dart';
+import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/group_expense.dart';
 import '../../domain/entities/group_member.dart';
 import '../providers/group_provider.dart';
@@ -34,9 +36,9 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
   String _name(String id) => widget.members
       .firstWhere((m) => m.id == id,
           orElse: () => GroupMember(id: id, name: 'Someone'))
-      .name;
+      .handle;
 
-  // ───── UPI helpers ─────────────────────────────────────────────────────────
+  // ----- UPI helpers ---------------------------------------------------------
 
   Future<void> _launchUpi(
       SettleUpTransaction s, String toName, String upiId) async {
@@ -126,6 +128,7 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     final myDebts = widget.settlements
         .where((s) =>
             s.fromId == widget.currentUserId || s.toId == widget.currentUserId)
@@ -135,19 +138,20 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
       return Container(
         padding: EdgeInsets.all(R.md),
         decoration: BoxDecoration(
-          color: AppColors.successLight,
+          color: colorScheme.tertiaryContainer,
           borderRadius: BorderRadius.circular(R.s(14)),
         ),
         child: Row(
           children: [
-            Text('🎉', style: TextStyle(fontSize: R.t(20))),
+            Icon(Icons.verified_rounded,
+                size: R.s(20), color: colorScheme.tertiary),
             SizedBox(width: R.s(10)),
             Text(
               'All settled up!',
               style: TextStyle(
                 fontSize: R.t(14),
                 fontWeight: FontWeight.w600,
-                color: AppColors.success,
+                color: colorScheme.onTertiaryContainer,
               ),
             ),
           ],
@@ -157,9 +161,16 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colorScheme.surface,
         borderRadius: BorderRadius.circular(R.s(14)),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colorScheme.outlineVariant),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.02),
+            blurRadius: 8,
+            offset: const Offset(0, 2),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -168,30 +179,41 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
             padding: EdgeInsets.fromLTRB(R.md, R.s(14), R.md, 0),
             child: Row(
               children: [
-                Text('📊', style: TextStyle(fontSize: R.t(16))),
+                Icon(Icons.swap_horiz_rounded,
+                    size: R.s(18), color: colorScheme.primary),
                 SizedBox(width: R.sm),
                 Text(
                   'Settlements',
                   style: TextStyle(
                     fontSize: R.t(13),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                   ),
                 ),
                 const Spacer(),
-                Container(
-                  padding:
-                      EdgeInsets.symmetric(horizontal: R.sm, vertical: R.s(3)),
-                  decoration: BoxDecoration(
-                    color: AppColors.primaryExtraLight,
-                    borderRadius: BorderRadius.circular(R.s(20)),
-                  ),
-                  child: Text(
-                    '${widget.settlements.length} transactions',
-                    style: TextStyle(
-                      fontSize: R.t(11),
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.primary,
+                AnimatedSwitcher(
+                  duration: 220.ms,
+                  switchInCurve: Curves.easeOut,
+                  switchOutCurve: Curves.easeIn,
+                  transitionBuilder: (child, animation) =>
+                      FadeTransition(opacity: animation, child: child),
+                  child: Container(
+                    key: ValueKey('${widget.settlements.length}'),
+                    padding: EdgeInsets.symmetric(
+                      horizontal: R.sm,
+                      vertical: R.s(3),
+                    ),
+                    decoration: BoxDecoration(
+                      color: colorScheme.primaryContainer,
+                      borderRadius: BorderRadius.circular(R.s(20)),
+                    ),
+                    child: Text(
+                      '${widget.settlements.length} transactions',
+                      style: TextStyle(
+                        fontSize: R.t(11),
+                        fontWeight: FontWeight.w700,
+                        color: colorScheme.primary,
+                      ),
                     ),
                   ),
                 ),
@@ -205,8 +227,18 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
             final isLoading = _settling.contains(settleKey);
             final creditorUpiId =
                 isOwing ? ref.watch(upiIdProvider)[s.toId] : null;
-            return Padding(
-              padding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.s(6)),
+            return AnimatedContainer(
+              duration: 220.ms,
+              curve: Curves.easeOut,
+              margin: EdgeInsets.symmetric(horizontal: R.md, vertical: R.s(5)),
+              padding:
+                  EdgeInsets.symmetric(horizontal: R.s(2), vertical: R.s(3)),
+              decoration: BoxDecoration(
+                color: isLoading
+                    ? colorScheme.primaryContainer.withValues(alpha: 0.35)
+                    : Colors.transparent,
+                borderRadius: BorderRadius.circular(R.s(10)),
+              ),
               child: Row(
                 children: [
                   // Avatar: tap to set UPI ID for the creditor
@@ -221,15 +253,16 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
                     child: RichText(
                       text: TextSpan(
                         style: TextStyle(
-                            fontSize: R.t(13), color: AppColors.textSecondary),
+                            fontSize: R.t(13),
+                            color: colorScheme.onSurfaceVariant),
                         children: [
                           TextSpan(
                               text: isOwing ? 'You owe ' : 'You get back '),
                           TextSpan(
                             text: isOwing ? _name(s.toId) : _name(s.fromId),
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textPrimary,
+                              color: colorScheme.onSurface,
                             ),
                           ),
                         ],
@@ -241,75 +274,99 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
                     style: TextStyle(
                       fontSize: R.t(14),
                       fontWeight: FontWeight.w700,
-                      color: isOwing ? AppColors.expense : AppColors.income,
+                      color: isOwing ? colorScheme.error : AppColors.income,
                     ),
                   ),
                   // Settle button (+ UPI pay icon) for debts I owe
                   if (isOwing) ...[
                     SizedBox(width: R.s(4)),
                     // UPI pay icon or "+UPI" prompt
-                    if (creditorUpiId != null)
-                      SizedBox(
-                        width: R.s(32),
-                        height: R.s(32),
-                        child: IconButton(
-                          padding: EdgeInsets.zero,
-                          tooltip: 'Pay via UPI',
-                          icon: Icon(Icons.payment_rounded,
-                              size: R.s(18), color: AppColors.primary),
-                          onPressed: () =>
-                              _launchUpi(s, _name(s.toId), creditorUpiId),
-                        ),
-                      )
-                    else
-                      SizedBox(
-                        height: R.s(30),
-                        child: TextButton(
-                          style: TextButton.styleFrom(
-                            padding: EdgeInsets.symmetric(horizontal: R.s(4)),
-                            foregroundColor: AppColors.textTertiary,
-                            textStyle: TextStyle(fontSize: R.t(11)),
-                          ),
-                          onPressed: () => _setUpiId(s.toId, _name(s.toId)),
-                          child: const Text('+ UPI'),
-                        ),
+                    AnimatedSwitcher(
+                      duration: 180.ms,
+                      switchInCurve: Curves.easeOut,
+                      switchOutCurve: Curves.easeIn,
+                      transitionBuilder: (child, animation) => FadeTransition(
+                        opacity: animation,
+                        child: ScaleTransition(scale: animation, child: child),
                       ),
+                      child: creditorUpiId != null
+                          ? SizedBox(
+                              key: ValueKey('upi-${s.toId}'),
+                              width: R.s(32),
+                              height: R.s(32),
+                              child: IconButton(
+                                padding: EdgeInsets.zero,
+                                tooltip: 'Pay via UPI',
+                                icon: Icon(Icons.payment_rounded,
+                                    size: R.s(18), color: AppColors.primary),
+                                onPressed: () =>
+                                    _launchUpi(s, _name(s.toId), creditorUpiId),
+                              ),
+                            )
+                          : SizedBox(
+                              key: ValueKey('add-upi-${s.toId}'),
+                              height: R.s(30),
+                              child: TextButton(
+                                style: TextButton.styleFrom(
+                                  padding:
+                                      EdgeInsets.symmetric(horizontal: R.s(4)),
+                                  foregroundColor: colorScheme.onSurfaceVariant,
+                                  textStyle: TextStyle(fontSize: R.t(11)),
+                                ),
+                                onPressed: () =>
+                                    _setUpiId(s.toId, _name(s.toId)),
+                                child: const Text('+ UPI'),
+                              ),
+                            ),
+                    ),
                     SizedBox(
                       width: R.s(60),
                       height: R.s(30),
-                      child: isLoading
-                          ? Center(
-                              child: SizedBox(
-                                width: R.s(16),
-                                height: R.s(16),
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: AppColors.primary,
+                      child: AnimatedSwitcher(
+                        duration: 200.ms,
+                        switchInCurve: Curves.easeOut,
+                        switchOutCurve: Curves.easeIn,
+                        transitionBuilder: (child, animation) => FadeTransition(
+                          opacity: animation,
+                          child:
+                              ScaleTransition(scale: animation, child: child),
+                        ),
+                        child: isLoading
+                            ? Center(
+                                key: ValueKey('loading-$settleKey'),
+                                child: SizedBox(
+                                  width: R.s(16),
+                                  height: R.s(16),
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: colorScheme.primary,
+                                  ),
                                 ),
-                              ),
-                            )
-                          : TextButton(
-                              style: TextButton.styleFrom(
-                                padding: EdgeInsets.zero,
-                                foregroundColor: AppColors.primary,
-                                textStyle: TextStyle(
-                                  fontSize: R.t(12),
-                                  fontWeight: FontWeight.w700,
+                              )
+                            : TextButton(
+                                key: ValueKey('cta-$settleKey'),
+                                style: TextButton.styleFrom(
+                                  padding: EdgeInsets.zero,
+                                  foregroundColor: colorScheme.primary,
+                                  textStyle: TextStyle(
+                                    fontSize: R.t(12),
+                                    fontWeight: FontWeight.w700,
+                                  ),
                                 ),
+                                onPressed: () => _settle(s),
+                                child: const Text('Settle'),
                               ),
-                              onPressed: () => _settle(s),
-                              child: const Text('Settle'),
-                            ),
+                      ),
                     ),
                   ],
                 ],
               ),
-            );
+            ).animate().fadeIn(duration: 220.ms).slideX(begin: 0.03, end: 0);
           }),
           if (widget.settlements.any((s) =>
               s.fromId != widget.currentUserId &&
               s.toId != widget.currentUserId)) ...[
-            const Divider(height: 1, color: AppColors.border),
+            Divider(height: 1, color: colorScheme.outlineVariant),
             Padding(
               padding: EdgeInsets.fromLTRB(R.md, R.s(10), R.md, R.s(4)),
               child: Text(
@@ -317,7 +374,7 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
                 style: TextStyle(
                   fontSize: R.t(10),
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textTertiary,
+                  color: colorScheme.onSurfaceVariant,
                   letterSpacing: 1.0,
                 ),
               ),
@@ -338,21 +395,21 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
                               text: TextSpan(
                                 style: TextStyle(
                                     fontSize: R.t(12),
-                                    color: AppColors.textSecondary),
+                                    color: colorScheme.onSurfaceVariant),
                                 children: [
                                   TextSpan(
                                     text: _name(s.fromId),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
+                                      color: colorScheme.onSurface,
                                     ),
                                   ),
-                                  const TextSpan(text: ' → '),
+                                  const TextSpan(text: ' settles with '),
                                   TextSpan(
                                     text: _name(s.toId),
-                                    style: const TextStyle(
+                                    style: TextStyle(
                                       fontWeight: FontWeight.w600,
-                                      color: AppColors.textPrimary,
+                                      color: colorScheme.onSurface,
                                     ),
                                   ),
                                 ],
@@ -364,7 +421,7 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
                             style: TextStyle(
                               fontSize: R.t(13),
                               fontWeight: FontWeight.w600,
-                              color: AppColors.textSecondary,
+                              color: colorScheme.onSurfaceVariant,
                             ),
                           ),
                         ],
@@ -383,22 +440,30 @@ class _Avatar extends StatelessWidget {
   const _Avatar({required this.name});
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: R.s(30),
-        height: R.s(30),
-        decoration: BoxDecoration(
-          color: AppColors.primaryExtraLight,
-          shape: BoxShape.circle,
-        ),
-        child: Center(
-          child: Text(
-            name.isNotEmpty ? name[0].toUpperCase() : '?',
-            style: TextStyle(
-              fontSize: R.t(12),
-              fontWeight: FontWeight.w700,
-              color: AppColors.primary,
-            ),
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      width: R.s(30),
+      height: R.s(30),
+      decoration: BoxDecoration(
+        color: colorScheme.primaryContainer,
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: Text(
+          () {
+            final trimmed = name.trim();
+            final normalized =
+                trimmed.startsWith('@') ? trimmed.substring(1) : trimmed;
+            return normalized.isNotEmpty ? normalized[0].toUpperCase() : '?';
+          }(),
+          style: TextStyle(
+            fontSize: R.t(12),
+            fontWeight: FontWeight.w700,
+            color: colorScheme.primary,
           ),
         ),
-      );
+      ),
+    );
+  }
 }

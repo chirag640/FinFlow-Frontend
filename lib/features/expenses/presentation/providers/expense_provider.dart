@@ -1,15 +1,16 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/network_error.dart';
 import '../../../../core/providers/connectivity_provider.dart';
+import '../../../../core/services/recurring_engine_service.dart';
 import '../../../auth/presentation/providers/cloud_auth_provider.dart';
+import '../../data/datasources/expense_local_datasource.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/entities/expense_category.dart';
-import '../../../../core/services/recurring_engine_service.dart';
-import '../../data/datasources/expense_local_datasource.dart';
 
 final expenseDatasourceProvider = Provider<ExpenseLocalDatasource>(
   (ref) => ExpenseLocalDatasource(),
@@ -223,6 +224,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
           if (recurringFrequency != null)
             'recurringRule': recurringFrequency.name,
         });
+        await _ds.clearPendingUpsert(expense.id);
         if (mounted) {
           state = state.copyWith(error: null);
         }
@@ -245,6 +247,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       try {
         final dio = _ref.read(dioProvider);
         await dio.delete(ApiEndpoints.expense(id));
+        await _ds.clearPendingDeletion(id);
         if (mounted) {
           state = state.copyWith(error: null);
         }
@@ -256,8 +259,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
         }
       }
     }
-    // Either offline or API failed — queue deletion for next sync push
-    await _ds.addPendingDeletion(id);
+    // Either offline or API failed — queued deletion stays pending for sync push.
   }
 
   /// Batch-upsert expenses received from the server during sync.
@@ -270,7 +272,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<void> bulkUpsertFromSync(List<Expense> expenses) async {
     if (expenses.isEmpty) return;
     for (final e in expenses) {
-      await _ds.save(e);
+      await _ds.save(e, trackPending: false);
     }
     // Yield past the current event to let Riverpod clean up disposed listeners.
     await Future.delayed(Duration.zero);
@@ -292,7 +294,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<void> bulkDeleteFromSync(List<String> ids) async {
     if (ids.isEmpty) return;
     for (final id in ids) {
-      await _ds.delete(id);
+      await _ds.delete(id, trackPending: false);
     }
     await Future.delayed(Duration.zero);
     if (!mounted) return;
@@ -302,25 +304,28 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   }
 
   Future<void> updateExpense(Expense updated) async {
-    await _ds.save(updated);
+    final localUpdated = updated.copyWith(updatedAt: DateTime.now());
+    await _ds.save(localUpdated);
     state = state.copyWith(
-      expenses:
-          state.expenses.map((e) => e.id == updated.id ? updated : e).toList(),
+      expenses: state.expenses
+          .map((e) => e.id == updated.id ? localUpdated : e)
+          .toList(),
     );
     if (_isOnline) {
       try {
         final dio = _ref.read(dioProvider);
-        await dio.patch(ApiEndpoints.expense(updated.id), data: {
-          'amount': updated.amount,
-          'description': updated.description,
-          'category': updated.category.name,
-          'date': updated.date.toIso8601String(),
-          'notes': updated.note,
-          'isIncome': updated.isIncome,
-          'isRecurring': updated.isRecurring,
-          if (updated.recurringFrequency != null)
-            'recurringRule': updated.recurringFrequency!.name,
+        await dio.patch(ApiEndpoints.expense(localUpdated.id), data: {
+          'amount': localUpdated.amount,
+          'description': localUpdated.description,
+          'category': localUpdated.category.name,
+          'date': localUpdated.date.toIso8601String(),
+          'notes': localUpdated.note,
+          'isIncome': localUpdated.isIncome,
+          'isRecurring': localUpdated.isRecurring,
+          if (localUpdated.recurringFrequency != null)
+            'recurringRule': localUpdated.recurringFrequency!.name,
         });
+        await _ds.clearPendingUpsert(localUpdated.id);
         if (mounted) {
           state = state.copyWith(error: null);
         }

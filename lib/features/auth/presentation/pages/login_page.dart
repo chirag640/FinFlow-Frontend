@@ -1,15 +1,16 @@
-﻿// Figma: Screen/CloudLogin
+// Figma: Screen/CloudLogin
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
-import 'package:go_router/go_router.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
+import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/router/app_router.dart';
-import '../../../../core/utils/responsive.dart';
-import '../providers/cloud_auth_provider.dart';
-import '../../../sync/presentation/providers/sync_provider.dart';
 import '../../../../core/ui/error_feedback.dart';
+import '../../../../core/utils/responsive.dart';
+import '../../../sync/presentation/providers/sync_provider.dart';
+import '../providers/cloud_auth_provider.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
   const LoginPage({super.key});
@@ -37,9 +38,11 @@ class _LoginPageState extends ConsumerState<LoginPage> {
       email: _emailCtrl.text.trim(),
       password: _passCtrl.text,
     );
-    // Success → sync and then go to dashboard.
+    // Success ? schedule sync and go to dashboard.
     if (user != null && mounted) {
-      await ref.read(syncProvider.notifier).sync();
+      ref
+          .read(syncProvider.notifier)
+          .scheduleSync(reason: 'post-login', delay: Duration.zero);
       if (mounted) context.go(AppRoutes.dashboard);
     }
   }
@@ -62,15 +65,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final hPad = screenWidth > 480 ? (screenWidth - 440) / 2 : 24.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded,
-              color: AppColors.textPrimary),
+          icon:
+              Icon(Icons.arrow_back_ios_rounded, color: colorScheme.onSurface),
           onPressed: () => context.pop(),
         ),
       ),
@@ -92,7 +96,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   borderRadius: BorderRadius.circular(R.s(14)),
                 ),
                 child: Center(
-                  child: Text('₹',
+                  child: Text('?',
                       style: TextStyle(
                           fontSize: R.t(26),
                           fontWeight: FontWeight.w900,
@@ -205,7 +209,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         labelText: label,
         prefixIcon: Icon(icon, color: AppColors.textTertiary, size: R.s(20)),
         filled: true,
-        fillColor: AppColors.surface,
+        fillColor: Theme.of(context).colorScheme.surface,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
           borderSide: const BorderSide(color: AppColors.border),

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/extensions.dart';
@@ -19,6 +20,7 @@ class RecentTransactionsList extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -29,7 +31,7 @@ class RecentTransactionsList extends StatelessWidget {
               style: TextStyle(
                 fontSize: R.t(16),
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: colors.onSurface,
               ),
             ),
             const Spacer(),
@@ -52,9 +54,9 @@ class RecentTransactionsList extends StatelessWidget {
             padding: EdgeInsets.symmetric(vertical: R.xl),
             width: double.infinity,
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colors.surface,
               borderRadius: BorderRadius.circular(R.md),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: colors.outlineVariant),
             ),
             child: Column(
               children: [
@@ -65,14 +67,14 @@ class RecentTransactionsList extends StatelessWidget {
                   style: TextStyle(
                     fontSize: R.t(14),
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textSecondary,
+                    color: colors.onSurface,
                   ),
                 ),
                 Text(
                   'Add your first expense to get started',
                   style: TextStyle(
                     fontSize: R.t(12),
-                    color: AppColors.textTertiary,
+                    color: colors.onSurfaceVariant,
                   ),
                 ),
               ],
@@ -81,9 +83,9 @@ class RecentTransactionsList extends StatelessWidget {
         else
           Container(
             decoration: BoxDecoration(
-              color: AppColors.surface,
+              color: colors.surface,
               borderRadius: BorderRadius.circular(R.md),
-              border: Border.all(color: AppColors.border),
+              border: Border.all(color: colors.outlineVariant),
             ),
             child: ListView.separated(
               physics: const NeverScrollableScrollPhysics(),
@@ -122,7 +124,7 @@ class RecentTransactionsList extends StatelessWidget {
                     style: TextStyle(
                       fontSize: R.t(14),
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
+                      color: colors.onSurface,
                     ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
@@ -133,7 +135,7 @@ class RecentTransactionsList extends StatelessWidget {
                         : '${cat.label} · ${e.date.relativeLabel}',
                     style: TextStyle(
                       fontSize: R.t(12),
-                      color: AppColors.textTertiary,
+                      color: colors.onSurfaceVariant,
                     ),
                   ),
                   trailing: Text(
@@ -141,8 +143,7 @@ class RecentTransactionsList extends StatelessWidget {
                     style: TextStyle(
                       fontSize: R.t(14),
                       fontWeight: FontWeight.w700,
-                      color:
-                          e.isIncome ? AppColors.income : AppColors.textPrimary,
+                      color: e.isIncome ? AppColors.income : colors.onSurface,
                     ),
                   ),
                 )

@@ -3,12 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
-import '../providers/goals_provider.dart';
 import '../../domain/entities/savings_goal.dart';
+import '../providers/goals_provider.dart';
 
 class GoalsPage extends ConsumerWidget {
   const GoalsPage({super.key});
@@ -16,21 +17,22 @@ class GoalsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     final state = ref.watch(goalsProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
         surfaceTintColor: Colors.transparent,
         elevation: 0,
-        leading: const BackButton(color: AppColors.textPrimary),
+        leading: BackButton(color: colorScheme.onSurface),
         title: Text(
           'Savings Goals',
           style: TextStyle(
               fontSize: R.t(18),
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary),
+              color: colorScheme.onSurface),
         ),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
@@ -273,7 +275,7 @@ class _GoalCard extends ConsumerWidget {
       margin: EdgeInsets.only(bottom: R.sm),
       padding: EdgeInsets.all(R.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.s(18)),
         border: Border.all(
           color: goal.isCompleted
@@ -499,7 +501,7 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
     final bottom = MediaQuery.viewInsetsOf(context).bottom;
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.s(24))),
       ),
       padding: EdgeInsets.fromLTRB(R.s(20), R.sm, R.s(20), R.s(20) + bottom),
@@ -543,7 +545,7 @@ class _AddGoalSheetState extends State<_AddGoalSheet> {
                     decoration: BoxDecoration(
                       color: _emoji == _emojis[i]
                           ? AppColors.primaryExtraLight
-                          : AppColors.surfaceVariant,
+                          : Theme.of(context).colorScheme.surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(R.s(12)),
                       border: Border.all(
                         color: _emoji == _emojis[i]
@@ -738,7 +740,7 @@ class _AddFundsSheetState extends State<_AddFundsSheet> {
 
     return Container(
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(R.s(24))),
       ),
       padding: EdgeInsets.fromLTRB(R.s(20), R.sm, R.s(20), R.s(20) + bottom),

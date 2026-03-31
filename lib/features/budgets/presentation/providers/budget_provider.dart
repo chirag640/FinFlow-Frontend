@@ -1,8 +1,7 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
-import '../../domain/entities/budget.dart';
-import '../../data/datasources/budget_local_datasource.dart';
+
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/network_error.dart';
@@ -11,6 +10,8 @@ import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/services/notification_service.dart';
 import '../../../auth/presentation/providers/cloud_auth_provider.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../../data/datasources/budget_local_datasource.dart';
+import '../../domain/entities/budget.dart';
 
 // Enriched budget: adds spent amount
 class BudgetEnvelope {
@@ -111,8 +112,9 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
           month: raw['month'] as int,
           year: raw['year'] as int,
           carryForward: raw['carryForward'] as bool? ?? false,
+          updatedAt: _parseDateTime(raw['updatedAt']) ?? DateTime.now(),
         );
-        await _ds.saveBudget(b);
+        await _ds.saveBudget(b, trackPending: false);
       }
       if (mounted) {
         state = state.copyWith(error: null);
@@ -217,18 +219,20 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
   }
 
   Future<void> addBudget(Budget budget) async {
-    await _ds.saveBudget(budget);
+    final localBudget = budget.copyWith(updatedAt: DateTime.now());
+    await _ds.saveBudget(localBudget);
     if (_isConnected) {
       try {
         final dio = _ref.read(dioProvider);
         await dio.post(ApiEndpoints.budgets, data: {
-          'id': budget.id,
-          'categoryKey': budget.categoryKey,
-          'allocatedAmount': budget.allocatedAmount,
-          'month': budget.month,
-          'year': budget.year,
-          'carryForward': budget.carryForward,
+          'id': localBudget.id,
+          'categoryKey': localBudget.categoryKey,
+          'allocatedAmount': localBudget.allocatedAmount,
+          'month': localBudget.month,
+          'year': localBudget.year,
+          'carryForward': localBudget.carryForward,
         });
+        await _ds.clearPendingUpsert(localBudget.id);
         if (mounted) {
           state = state.copyWith(error: null);
         }
@@ -248,6 +252,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       try {
         final dio = _ref.read(dioProvider);
         await dio.delete(ApiEndpoints.budget(id));
+        await _ds.clearPendingDeletion(id);
         if (mounted) {
           state = state.copyWith(error: null);
         }
@@ -286,6 +291,13 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
 
   /// Refresh spent amounts based on current expense state
   void refresh() => _load();
+
+  DateTime? _parseDateTime(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
 }
 
 final budgetDatasourceProvider = Provider<BudgetLocalDatasource>(
@@ -295,8 +307,12 @@ final budgetDatasourceProvider = Provider<BudgetLocalDatasource>(
 final budgetProvider =
     StateNotifierProvider<BudgetNotifier, BudgetState>((ref) {
   final ds = ref.watch(budgetDatasourceProvider);
-  // Watch expense changes to refresh budget spent amounts
-  ref.watch(expenseProvider);
   final notifier = BudgetNotifier(ds, ref);
+
+  // Refresh spent amounts when expenses change without recreating notifier.
+  ref.listen<ExpenseState>(expenseProvider, (_, __) {
+    notifier.refresh();
+  });
+
   return notifier;
 });

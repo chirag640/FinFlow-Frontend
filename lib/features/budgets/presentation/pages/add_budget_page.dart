@@ -2,13 +2,14 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
+import '../../../expenses/domain/entities/expense_category.dart';
 import '../../domain/entities/budget.dart';
 import '../../presentation/providers/budget_provider.dart';
-import '../../../expenses/domain/entities/expense_category.dart';
 
 class AddBudgetPage extends ConsumerStatefulWidget {
   const AddBudgetPage({super.key});
@@ -75,10 +76,12 @@ class _AddBudgetPageState extends ConsumerState<AddBudgetPage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-        backgroundColor: AppColors.background,
+        backgroundColor: colorScheme.surfaceContainerLow,
         appBar: AppBar(
-          backgroundColor: AppColors.surface,
+          backgroundColor: colorScheme.surface,
+          foregroundColor: colorScheme.onSurface,
           elevation: 0,
           scrolledUnderElevation: 0,
           leading: IconButton(
@@ -90,7 +93,7 @@ class _AddBudgetPageState extends ConsumerState<AddBudgetPage> {
             style: TextStyle(
               fontSize: R.t(17),
               fontWeight: FontWeight.w700,
-              color: AppColors.textPrimary,
+              color: colorScheme.onSurface,
             ),
           ),
         ),
@@ -174,7 +177,7 @@ class _AddBudgetPageState extends ConsumerState<AddBudgetPage> {
                               decoration: BoxDecoration(
                                 color: selected
                                     ? cat.color.withValues(alpha: 0.15)
-                                    : AppColors.surfaceVariant,
+                                    : colorScheme.surfaceContainerHighest,
                                 borderRadius: BorderRadius.circular(R.s(12)),
                                 border: Border.all(
                                   color:
@@ -216,9 +219,9 @@ class _AddBudgetPageState extends ConsumerState<AddBudgetPage> {
                         padding: EdgeInsets.symmetric(
                             horizontal: R.md, vertical: R.s(12)),
                         decoration: BoxDecoration(
-                          color: AppColors.surface,
+                          color: colorScheme.surface,
                           borderRadius: BorderRadius.circular(R.s(14)),
-                          border: Border.all(color: AppColors.border),
+                          border: Border.all(color: colorScheme.outlineVariant),
                         ),
                         child: Row(
                           children: [

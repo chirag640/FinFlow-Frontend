@@ -1,4 +1,21 @@
+import 'dart:async';
+
+import 'package:dio/dio.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+
+import '../network/api_endpoints.dart';
+
+@pragma('vm:entry-point')
+Future<void> finflowFirebaseBackgroundHandler(RemoteMessage message) async {
+  try {
+    await Firebase.initializeApp();
+  } catch (_) {
+    // Keep the background isolate safe even when Firebase is not configured.
+  }
+}
 
 /// Handles all local (on-device) notifications — no FCM required.
 /// Channels:  budget_alerts  |  goal_milestones  |  recurring_alerts
@@ -6,6 +23,12 @@ class NotificationService {
   NotificationService._();
 
   static final _plugin = FlutterLocalNotificationsPlugin();
+  static bool _initialized = false;
+  static bool _fcmInitialized = false;
+  static Dio? _dioForTokenSync;
+  static String? _activeFcmToken;
+  static StreamSubscription<RemoteMessage>? _foregroundMessageSub;
+  static StreamSubscription<String>? _tokenRefreshSub;
 
   // ── Android notification channels ─────────────────────────────────────────
   static const _budgetChannel = AndroidNotificationChannel(
@@ -29,8 +52,18 @@ class NotificationService {
     importance: Importance.defaultImportance,
   );
 
+  static const _groupChannel = AndroidNotificationChannel(
+    'group_updates',
+    'Group Updates',
+    description:
+        'Invites, newly added expenses, settlements, and daily expense summaries.',
+    importance: Importance.high,
+  );
+
   // ── Init ──────────────────────────────────────────────────────────────────
   static Future<void> init() async {
+    if (_initialized) return;
+
     const android = AndroidInitializationSettings('@mipmap/ic_launcher');
     const ios = DarwinInitializationSettings(
       requestAlertPermission: true,
@@ -48,7 +81,119 @@ class NotificationService {
     await androidPlugin?.createNotificationChannel(_budgetChannel);
     await androidPlugin?.createNotificationChannel(_goalsChannel);
     await androidPlugin?.createNotificationChannel(_recurringChannel);
+    await androidPlugin?.createNotificationChannel(_groupChannel);
     await androidPlugin?.requestNotificationsPermission();
+
+    _initialized = true;
+  }
+
+  static Future<void> syncFcmToken(Dio dio) async {
+    await init();
+    _dioForTokenSync = dio;
+    await _ensureFcmReady();
+
+    if (!_fcmInitialized) return;
+
+    try {
+      final token = await FirebaseMessaging.instance.getToken();
+      if (token == null || token.isEmpty) return;
+      await _registerToken(token);
+    } catch (e) {
+      debugPrint('[FinFlow] FCM token sync failed: $e');
+    }
+  }
+
+  static Future<void> unregisterFcmToken(Dio dio) async {
+    final token = _activeFcmToken;
+    if (token == null || token.isEmpty) return;
+
+    try {
+      await dio.delete(
+        ApiEndpoints.notificationDevices,
+        data: {'token': token},
+      );
+    } catch (e) {
+      debugPrint('[FinFlow] FCM token unregister failed: $e');
+    } finally {
+      _activeFcmToken = null;
+    }
+  }
+
+  static Future<void> _ensureFcmReady() async {
+    if (_fcmInitialized) return;
+
+    try {
+      await Firebase.initializeApp();
+      final messaging = FirebaseMessaging.instance;
+
+      await messaging.requestPermission(alert: true, badge: true, sound: true);
+      await messaging.setForegroundNotificationPresentationOptions(
+        alert: true,
+        badge: true,
+        sound: true,
+      );
+
+      FirebaseMessaging.onBackgroundMessage(finflowFirebaseBackgroundHandler);
+
+      _foregroundMessageSub ??=
+          FirebaseMessaging.onMessage.listen(_showForegroundMessage);
+
+      _tokenRefreshSub ??= messaging.onTokenRefresh.listen((token) async {
+        if (_dioForTokenSync == null || token.isEmpty) return;
+        await _registerToken(token);
+      });
+
+      _fcmInitialized = true;
+    } catch (e) {
+      // Firebase may be intentionally unconfigured in local/dev builds.
+      debugPrint('[FinFlow] FCM disabled: $e');
+      _fcmInitialized = false;
+    }
+  }
+
+  static Future<void> _registerToken(String token) async {
+    if (_dioForTokenSync == null) return;
+    if (_activeFcmToken == token) return;
+
+    try {
+      await _dioForTokenSync!.post(
+        ApiEndpoints.notificationDevices,
+        data: {
+          'token': token,
+          'platform': _platformName,
+        },
+      );
+      _activeFcmToken = token;
+    } catch (e) {
+      debugPrint('[FinFlow] FCM register API failed: $e');
+    }
+  }
+
+  static Future<void> _showForegroundMessage(RemoteMessage message) async {
+    final title = message.notification?.title?.trim();
+    final body = message.notification?.body?.trim();
+    if (title == null || title.isEmpty || body == null || body.isEmpty) {
+      return;
+    }
+
+    await _show(
+      id: message.messageId.hashCode & 0x7FFFFFFF,
+      title: title,
+      body: body,
+      channel: _groupChannel,
+    );
+  }
+
+  static String get _platformName {
+    if (kIsWeb) return 'web';
+    return switch (defaultTargetPlatform) {
+      TargetPlatform.android => 'android',
+      TargetPlatform.iOS => 'ios',
+      TargetPlatform.macOS => 'macos',
+      TargetPlatform.windows => 'windows',
+      TargetPlatform.linux => 'linux',
+      _ => 'unknown',
+    };
   }
 
   // ── Budget alerts ─────────────────────────────────────────────────────────

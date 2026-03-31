@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
-import '../providers/budget_provider.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
+import '../providers/budget_provider.dart';
 
 class BudgetEnvelopeCard extends StatelessWidget {
   final BudgetEnvelope envelope;
@@ -18,6 +19,7 @@ class BudgetEnvelopeCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     final budget = envelope.budget;
     final cat = ExpenseCategory.values.firstWhere(
       (c) => c.key == budget.categoryKey,
@@ -34,10 +36,10 @@ class BudgetEnvelopeCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(R.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(
-          color: isOver ? AppColors.errorLight : AppColors.border,
+          color: isOver ? AppColors.errorLight : colors.outlineVariant,
           width: isOver ? 1.5 : 1.0,
         ),
       ),
@@ -109,7 +111,8 @@ class BudgetEnvelopeCard extends StatelessWidget {
               builder: (_, val, __) => LinearProgressIndicator(
                 value: val,
                 minHeight: R.s(7),
-                backgroundColor: AppColors.surfaceVariant,
+                backgroundColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 valueColor: AlwaysStoppedAnimation(progressColor),
               ),
             ),

@@ -4,6 +4,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -13,22 +14,40 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../budgets/presentation/providers/budget_provider.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
-import '../../../sync/presentation/providers/sync_provider.dart';
 import '../../../goals/domain/entities/savings_goal.dart';
 import '../../../goals/presentation/providers/goals_provider.dart';
+import '../../../sync/presentation/providers/sync_provider.dart';
 import '../providers/dashboard_provider.dart';
-
 import '../widgets/balance_hero_card.dart';
 import '../widgets/quick_stats_row.dart';
 import '../widgets/recent_transactions_list.dart';
 import '../widgets/spending_chart_widget.dart';
 
-class DashboardPage extends ConsumerWidget {
+class DashboardPage extends ConsumerStatefulWidget {
   const DashboardPage({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<DashboardPage> createState() => _DashboardPageState();
+}
+
+class _DashboardPageState extends ConsumerState<DashboardPage> {
+  bool _routeSyncTriggered = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || _routeSyncTriggered) return;
+      _routeSyncTriggered = true;
+      ref.read(syncProvider.notifier).onRouteVisible('dashboard');
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
+
     final summary = ref.watch(dashboardProvider);
     final user = ref.watch(currentUserProvider);
     final expState = ref.watch(expenseProvider);
@@ -40,7 +59,7 @@ class DashboardPage extends ConsumerWidget {
     final greeting = _greeting(now.hour);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: FinFlowAppBar(
         title: 'FinFlow',
         showLogo: true,
@@ -49,11 +68,6 @@ class DashboardPage extends ConsumerWidget {
             icon: const Icon(Icons.auto_awesome_rounded),
             onPressed: () => context.push(AppRoutes.aiInsights),
             tooltip: 'AI Insights',
-          ),
-          IconButton(
-            icon: const Icon(Icons.trending_up_rounded),
-            onPressed: () => context.go(AppRoutes.investments),
-            tooltip: 'Investments',
           ),
           IconButton(
             icon: const Icon(Icons.savings_rounded),
@@ -80,7 +94,7 @@ class DashboardPage extends ConsumerWidget {
                             : Icons.cloud_upload_rounded,
                         color: syncState.lastSyncTime != null
                             ? AppColors.success
-                            : AppColors.textTertiary,
+                            : colors.onSurfaceVariant,
                       ),
             onPressed: syncState.isSyncing
                 ? null
@@ -126,7 +140,7 @@ class DashboardPage extends ConsumerWidget {
                       style: TextStyle(
                         fontSize: R.t(26),
                         fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+                        color: colors.onSurface,
                       ),
                     )
                         .animate()
@@ -137,7 +151,7 @@ class DashboardPage extends ConsumerWidget {
                       _monthLabel(now),
                       style: TextStyle(
                         fontSize: R.t(14),
-                        color: AppColors.textTertiary,
+                        color: colors.onSurfaceVariant,
                       ),
                     ).animate().fadeIn(delay: 100.ms, duration: 400.ms),
                     SizedBox(height: R.s(24)),
@@ -314,7 +328,7 @@ class _GoalsPreviewCard extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(R.s(14)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.md),
         border: Border.all(color: AppColors.border),
       ),
@@ -556,7 +570,7 @@ class _SmartInsightsRow extends StatelessWidget {
         label: 'Month End',
         value: '$daysLeft day${daysLeft == 1 ? '' : 's'} left',
         iconColor: AppColors.textSecondary,
-        bgColor: AppColors.surfaceVariant,
+        bgColor: Theme.of(context).colorScheme.surfaceContainerHighest,
       ),
       if (delta != null)
         _InsightTile(
@@ -630,7 +644,7 @@ class _InsightCard extends StatelessWidget {
       width: R.s(130),
       padding: EdgeInsets.all(R.s(14)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.s(14)),
         border: Border.all(color: AppColors.border),
       ),
@@ -740,8 +754,8 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
       date: DateTime.now(),
       isIncome: _isIncome,
     );
-    // Trigger cloud sync immediately after local save (fire-and-forget)
-    syncNotifier.sync();
+    // Debounced sync reduces API burst while keeping cloud state fresh.
+    syncNotifier.scheduleSync(reason: 'quick-add-created');
     if (mounted) {
       HapticFeedback.lightImpact();
       Navigator.of(context).pop();
@@ -751,8 +765,8 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
   @override
   Widget build(BuildContext context) {
     return Container(
-      decoration: const BoxDecoration(
-        color: AppColors.surface,
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       padding: EdgeInsets.only(
@@ -806,7 +820,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
             Container(
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
-                color: AppColors.surfaceVariant,
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 borderRadius: BorderRadius.circular(10),
               ),
               child: Row(
@@ -854,7 +868,8 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                   color: AppColors.textSecondary,
                 ),
                 filled: true,
-                fillColor: AppColors.surfaceVariant,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
@@ -879,7 +894,8 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                 hintText: 'What was this for?',
                 hintStyle: const TextStyle(color: AppColors.textDisabled),
                 filled: true,
-                fillColor: AppColors.surfaceVariant,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(14),
                   borderSide: BorderSide.none,
@@ -908,7 +924,9 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                       decoration: BoxDecoration(
                         color: isSel
                             ? cat.color.withValues(alpha: 0.14)
-                            : AppColors.surfaceVariant,
+                            : Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
                           color: isSel ? cat.color : AppColors.border,
@@ -985,7 +1003,9 @@ class _TypeToggle extends StatelessWidget {
           duration: const Duration(milliseconds: 200),
           padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
-            color: selected ? AppColors.surface : Colors.transparent,
+            color: selected
+                ? Theme.of(context).colorScheme.surface
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
             boxShadow: selected
                 ? [

@@ -33,7 +33,7 @@ class RecurringSectionWidget extends StatelessWidget {
           decoration: BoxDecoration(
             color: isRecurring
                 ? AppColors.primary.withValues(alpha: 0.08)
-                : AppColors.surfaceVariant,
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
             borderRadius: BorderRadius.circular(R.s(14)),
             border: Border.all(
               color: isRecurring
@@ -116,7 +116,7 @@ class RecurringSectionWidget extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: selected
                               ? AppColors.primary
-                              : AppColors.surfaceVariant,
+                              : Theme.of(context).colorScheme.surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(R.s(10)),
                         ),
                         child: Text(

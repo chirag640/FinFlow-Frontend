@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../core/design/app_colors.dart';
 import '../../core/utils/responsive.dart';
 
@@ -28,8 +29,9 @@ class FinFlowAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return AppBar(
-      backgroundColor: AppColors.surface,
+      backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
       elevation: 0,
       scrolledUnderElevation: 0,
       titleSpacing: showLogo ? 0 : null,
@@ -61,7 +63,7 @@ class FinFlowAppBar extends StatelessWidget implements PreferredSizeWidget {
                   style: TextStyle(
                     fontSize: R.t(20),
                     fontWeight: FontWeight.w800,
-                    color: AppColors.textPrimary,
+                    color: colors.onSurface,
                   ),
                 ),
               ],
@@ -71,7 +73,7 @@ class FinFlowAppBar extends StatelessWidget implements PreferredSizeWidget {
               style: TextStyle(
                 fontSize: R.t(20),
                 fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
+                color: colors.onSurface,
               ),
             ),
       actions: actions,

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../app_colors.dart';
+
 import '../../utils/responsive.dart';
 
 class DSTextField extends StatelessWidget {
@@ -43,6 +43,7 @@ class DSTextField extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -52,7 +53,7 @@ class DSTextField extends StatelessWidget {
             style: TextStyle(
               fontSize: R.t(13),
               fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
+              color: colors.onSurfaceVariant,
               letterSpacing: 0.2,
             ),
           ),
@@ -73,7 +74,7 @@ class DSTextField extends StatelessWidget {
           style: TextStyle(
             fontSize: R.t(15),
             fontWeight: FontWeight.w500,
-            color: AppColors.textPrimary,
+            color: colors.onSurface,
             height: 1.4,
           ),
           decoration: InputDecoration(
@@ -84,7 +85,7 @@ class DSTextField extends StatelessWidget {
                     padding: EdgeInsets.symmetric(horizontal: R.sm + R.xs),
                     child: IconTheme(
                       data: IconThemeData(
-                        color: AppColors.textTertiary,
+                        color: colors.onSurfaceVariant,
                         size: R.s(20),
                       ),
                       child: prefixIcon!,
@@ -96,7 +97,7 @@ class DSTextField extends StatelessWidget {
                     padding: EdgeInsets.symmetric(horizontal: R.sm + R.xs),
                     child: IconTheme(
                       data: IconThemeData(
-                        color: AppColors.textTertiary,
+                        color: colors.onSurfaceVariant,
                         size: R.s(20),
                       ),
                       child: suffixIcon!,

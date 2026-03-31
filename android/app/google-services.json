@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1026272075516",
+    "project_id": "notificationdemo-affd4",
+    "storage_bucket": "notificationdemo-affd4.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1026272075516:android:a88fd9775a05ad61a40179",
+        "android_client_info": {
+          "package_name": "com.finflow.finflow"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAZfnz4JDZ5yROKnprI2OuO8i8n_GG2vUg"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

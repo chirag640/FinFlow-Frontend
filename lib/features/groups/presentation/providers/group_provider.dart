@@ -1,16 +1,17 @@
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:uuid/uuid.dart';
+
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/network_error.dart';
 import '../../../../core/providers/connectivity_provider.dart';
+import '../../../auth/presentation/providers/auth_provider.dart';
+import '../../../auth/presentation/providers/cloud_auth_provider.dart';
+import '../../data/datasources/group_local_datasource.dart';
 import '../../domain/entities/group.dart';
 import '../../domain/entities/group_expense.dart';
 import '../../domain/entities/group_member.dart';
-import '../../data/datasources/group_local_datasource.dart';
-import '../../../auth/presentation/providers/auth_provider.dart';
-import '../../../auth/presentation/providers/cloud_auth_provider.dart';
 
 final groupDatasourceProvider = Provider<GroupLocalDatasource>(
   (ref) => GroupLocalDatasource(),
@@ -56,6 +57,11 @@ class GroupNotifier extends StateNotifier<GroupState> {
   void _load() {
     state = state.copyWith(isLoading: true);
     state = state.copyWith(groups: _ds.getAllGroups(), isLoading: false);
+  }
+
+  Future<void> refresh() async {
+    _load();
+    await _syncFromCloud();
   }
 
   bool get _isConnected {
@@ -212,13 +218,19 @@ class GroupNotifier extends StateNotifier<GroupState> {
       final data = res.data['data'] as Map<String, dynamic>;
       final memberId = (data['_id'] ?? data['id']) as String;
       final serverName = (data['name'] as String?) ?? displayName;
+      final serverUsername = data['username'] as String?;
 
       final idx = state.groups.indexWhere((g) => g.id == groupId);
       if (idx < 0) return;
       final updated = state.groups[idx].copyWith(
         members: [
           ...state.groups[idx].members,
-          GroupMember(id: memberId, name: serverName),
+          GroupMember(
+            id: memberId,
+            name: serverName,
+            username: serverUsername,
+            userId: userId,
+          ),
         ],
       );
       await _ds.saveGroup(updated);

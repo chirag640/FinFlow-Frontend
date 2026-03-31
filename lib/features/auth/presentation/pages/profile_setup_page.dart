@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/utils/responsive.dart';
@@ -60,10 +61,12 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         automaticallyImplyLeading: false,
       ),
       body: SafeArea(
@@ -118,7 +121,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   decoration: InputDecoration(
                     hintText: 'e.g. Arjun Sharma',
                     filled: true,
-                    fillColor: AppColors.surfaceVariant,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(R.s(14)),
                       borderSide: BorderSide.none,
@@ -172,7 +175,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                       color: AppColors.textSecondary,
                     ),
                     filled: true,
-                    fillColor: AppColors.surfaceVariant,
+                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(R.s(14)),
                       borderSide: BorderSide.none,

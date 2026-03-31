@@ -3,14 +3,15 @@ import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
+import '../../../sync/presentation/providers/sync_provider.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/entities/expense_category.dart';
-import '../../../sync/presentation/providers/sync_provider.dart';
 import '../providers/expense_provider.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/recurring_section_widget.dart';
@@ -87,8 +88,8 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
       isRecurring: _isRecurring,
       recurringFrequency: _isRecurring ? _recurringFrequency : null,
     );
-    // Push to cloud immediately after local save (fire-and-forget)
-    syncNotifier.sync();
+    // Debounced sync prevents heavy full-sync after every single save.
+    syncNotifier.scheduleSync(reason: 'expense-created');
     if (mounted) {
       setState(() => _isLoading = false);
       HapticFeedback.lightImpact();
@@ -99,10 +100,12 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surfaceContainerLow,
         appBar: AppBar(
-          backgroundColor: AppColors.surface,
+          backgroundColor: colorScheme.surface,
+          foregroundColor: colorScheme.onSurface,
           leading: IconButton(
             icon: const Icon(Icons.close_rounded),
             onPressed: () => context.pop(),
@@ -134,7 +137,9 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
                     Container(
                       padding: EdgeInsets.all(R.xs),
                       decoration: BoxDecoration(
-                        color: AppColors.surfaceVariant,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
                         borderRadius: BorderRadius.circular(R.s(12)),
                       ),
                       child: Row(
@@ -252,7 +257,9 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
                           vertical: R.s(14),
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(R.s(14)),
                         ),
                         child: Row(
@@ -302,7 +309,9 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
                           vertical: R.s(14),
                         ),
                         decoration: BoxDecoration(
-                          color: AppColors.surfaceVariant,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                           borderRadius: BorderRadius.circular(R.s(14)),
                         ),
                         child: Row(
@@ -388,7 +397,7 @@ class _AddExpensePageState extends ConsumerState<AddExpensePage> {
   InputDecoration _fieldDecoration(String hint) => InputDecoration(
         hintText: hint,
         filled: true,
-        fillColor: AppColors.surfaceVariant,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(14)),
           borderSide: BorderSide.none,
@@ -425,7 +434,9 @@ class _TypeTab extends StatelessWidget {
           duration: const Duration(milliseconds: 150),
           padding: EdgeInsets.symmetric(vertical: R.s(10)),
           decoration: BoxDecoration(
-            color: selected ? AppColors.surface : Colors.transparent,
+            color: selected
+                ? Theme.of(context).colorScheme.surface
+                : Colors.transparent,
             borderRadius: BorderRadius.circular(R.s(10)),
             boxShadow: selected
                 ? [

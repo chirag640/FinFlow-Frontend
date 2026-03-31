@@ -7,9 +7,14 @@ class BiometricService {
   /// Returns true if the device supports biometrics (fingerprint / face ID).
   static Future<bool> isAvailable() async {
     try {
-      final canCheck = await _auth.canCheckBiometrics;
       final isSupported = await _auth.isDeviceSupported();
-      return canCheck && isSupported;
+      if (!isSupported) return false;
+
+      final canCheck = await _auth.canCheckBiometrics;
+      if (!canCheck) return false;
+
+      final types = await _auth.getAvailableBiometrics();
+      return types.isNotEmpty;
     } catch (_) {
       return false;
     }
@@ -28,11 +33,13 @@ class BiometricService {
   /// Returns true on success, false if cancelled or user falls back.
   static Future<bool> authenticate() async {
     try {
+      await _auth.stopAuthentication();
       return await _auth.authenticate(
         localizedReason: 'Use biometrics to unlock FinFlow',
         options: const AuthenticationOptions(
-          biometricOnly: false, // allow device PIN as fallback
+          biometricOnly: true,
           stickyAuth: true,
+          useErrorDialogs: true,
         ),
       );
     } catch (_) {

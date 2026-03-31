@@ -1,5 +1,6 @@
 import 'package:fl_chart/fl_chart.dart';
 import 'package:flutter/material.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
@@ -11,6 +12,7 @@ class SpendingChartWidget extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     final maxY = dailySpending.reduce((a, b) => a > b ? a : b);
     final adjustedMax = maxY == 0 ? 1000.0 : maxY * 1.3;
 
@@ -24,9 +26,9 @@ class SpendingChartWidget extends StatelessWidget {
     return Container(
       padding: EdgeInsets.all(R.s(20)),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: colors.surface,
         borderRadius: BorderRadius.circular(R.s(20)),
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -38,7 +40,7 @@ class SpendingChartWidget extends StatelessWidget {
                 style: TextStyle(
                   fontSize: R.t(15),
                   fontWeight: FontWeight.w700,
-                  color: AppColors.textPrimary,
+                  color: colors.onSurface,
                 ),
               ),
               const Spacer(),
@@ -91,7 +93,7 @@ class SpendingChartWidget extends StatelessWidget {
                           dayLabels[idx],
                           style: TextStyle(
                             fontSize: R.t(10),
-                            color: AppColors.textTertiary,
+                            color: colors.onSurfaceVariant,
                             fontWeight: FontWeight.w500,
                           ),
                         );
@@ -129,7 +131,7 @@ class SpendingChartWidget extends StatelessWidget {
                         radius: 3.5,
                         color: AppColors.primary,
                         strokeWidth: 2,
-                        strokeColor: Colors.white,
+                        strokeColor: colors.surface,
                       ),
                     ),
                     belowBarData: BarAreaData(

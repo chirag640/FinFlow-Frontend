@@ -140,6 +140,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     if (parts.length != 2) return email;
     final name = parts[0];
     final domain = parts[1];
+    if (name.isEmpty) return email;
     final visible = name.length > 2 ? name.substring(0, 2) : name[0];
     return '$visible${'*' * (name.length - visible.length)}@$domain';
   }
@@ -160,15 +161,16 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final isWide = screenWidth > 480;
     final hPad = isWide ? (screenWidth - 440) / 2 : 24.0;
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded,
-              color: AppColors.textPrimary),
+          icon:
+              Icon(Icons.arrow_back_ios_rounded, color: colorScheme.onSurface),
           onPressed: () {
             // Clear pending verification state and go back to auth landing
             ref.read(cloudAuthProvider.notifier).logout();
@@ -297,38 +299,43 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
 
   Widget _buildDigitField(int index) {
     final screenWidth = MediaQuery.sizeOf(context).width;
-    final fieldSize = ((screenWidth - 48 - 5 * 8) / 6).clamp(44.0, 56.0);
+    final fieldSize = ((screenWidth - 48 - 5 * 8) / 6).clamp(46.0, 58.0);
 
-    return KeyboardListener(
-      focusNode: FocusNode(),
-      onKeyEvent: (e) => _onDigitKeyDown(index, e),
-      child: SizedBox(
-        width: fieldSize,
-        height: fieldSize,
+    return SizedBox(
+      width: fieldSize,
+      height: fieldSize,
+      child: Focus(
+        onKeyEvent: (_, e) {
+          _onDigitKeyDown(index, e);
+          return KeyEventResult.ignored;
+        },
         child: TextFormField(
           controller: _digits[index],
           focusNode: _focuses[index],
           keyboardType: TextInputType.number,
           textInputAction:
               index == 5 ? TextInputAction.done : TextInputAction.next,
+          autofillHints: const [AutofillHints.oneTimeCode],
           textAlign: TextAlign.center,
           textAlignVertical: TextAlignVertical.center,
           maxLength: 6, // allow paste of full code into first field
           inputFormatters: [FilteringTextInputFormatter.digitsOnly],
           cursorColor: AppColors.primary,
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                fontSize: 22,
-                height: 1.05,
+                fontSize: 24,
+                height: 1.0,
                 fontWeight: FontWeight.w800,
                 color: AppColors.textPrimary,
               ),
           decoration: InputDecoration(
             counterText: '',
-            contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            isDense: true,
+            isCollapsed: true,
+            contentPadding: EdgeInsets.symmetric(vertical: fieldSize * 0.28),
             filled: true,
             fillColor: _digits[index].text.isNotEmpty
                 ? AppColors.primary.withValues(alpha: 0.08)
-                : AppColors.surface,
+                : Theme.of(context).colorScheme.surface,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.s(12)),
               borderSide: const BorderSide(color: AppColors.border),

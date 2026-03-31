@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+
+import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:dio/dio.dart';
+
 import 'api_endpoints.dart';
 
 // ── Token keys ───────────────────────────────────────────────────────────────
@@ -28,7 +30,7 @@ abstract class RequestHeaderKeys {
 final dioProvider = Provider<Dio>((ref) {
   const baseUrl = String.fromEnvironment('API_BASE_URL',
       // defaultValue: 'http://10.0.2.2:3000/api/v1');
-      defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
+  defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
 
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
@@ -207,7 +209,6 @@ class AuthInterceptor extends Interceptor {
     return path.startsWith('/expenses') ||
         path.startsWith('/groups') ||
         path.startsWith('/budgets') ||
-        path.startsWith('/investments') ||
         path.startsWith('/sync') ||
         path.startsWith('/users') ||
         path == ApiEndpoints.authSessionsRevoke;

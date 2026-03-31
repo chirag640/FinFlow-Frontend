@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
 import '../../../../core/design/components/ds_skeleton.dart';
@@ -26,12 +27,19 @@ class ExpensesPage extends ConsumerStatefulWidget {
 class _ExpensesPageState extends ConsumerState<ExpensesPage> {
   bool _searchActive = false;
   final _searchCtrl = TextEditingController();
+  late final ExpenseNotifier _expenseNotifier;
+
+  @override
+  void initState() {
+    super.initState();
+    _expenseNotifier = ref.read(expenseProvider.notifier);
+  }
 
   @override
   void dispose() {
     _searchCtrl.dispose();
     // Clear search query when leaving page
-    ref.read(expenseProvider.notifier).clearSearch();
+    _expenseNotifier.clearSearch();
     super.dispose();
   }
 
@@ -39,7 +47,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
     setState(() => _searchActive = !_searchActive);
     if (!_searchActive) {
       _searchCtrl.clear();
-      ref.read(expenseProvider.notifier).clearSearch();
+      _expenseNotifier.clearSearch();
     }
   }
 
@@ -66,15 +74,16 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
       provider: expenseProvider,
       errorSelector: (s) => s.error,
     );
+    final colors = Theme.of(context).colorScheme;
     final state = ref.watch(expenseProvider);
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: NestedScrollView(
         headerSliverBuilder: (context, _) => [
           SliverAppBar(
             pinned: true,
-            backgroundColor: AppColors.surface,
+            backgroundColor: Theme.of(context).appBarTheme.backgroundColor,
             floating: true,
             snap: true,
             elevation: 0,
@@ -86,28 +95,28 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                 ? TextField(
                     controller: _searchCtrl,
                     autofocus: true,
-                    decoration: const InputDecoration(
+                    decoration: InputDecoration(
                       hintText: 'Search expenses...',
                       border: InputBorder.none,
                       hintStyle: TextStyle(
-                        color: AppColors.textTertiary,
+                        color: colors.onSurfaceVariant,
                         fontSize: 16,
                       ),
                     ),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w500,
-                      color: AppColors.textPrimary,
+                      color: colors.onSurface,
                     ),
                     onChanged: (q) =>
                         ref.read(expenseProvider.notifier).setSearch(q),
                   )
-                : const Text(
+                : Text(
                     'Expenses',
                     style: TextStyle(
                       fontSize: 22,
                       fontWeight: FontWeight.w700,
-                      color: AppColors.textPrimary,
+                      color: colors.onSurface,
                     ),
                   ),
             actions: [
@@ -128,7 +137,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                             ? Icons.tune_rounded
                             : Icons.tune_rounded,
                         color: state.activeFilters.isEmpty
-                            ? AppColors.textSecondary
+                            ? colors.onSurfaceVariant
                             : AppColors.primary,
                       ),
                       onPressed: () => _showFilterSheet(context, ref, state),
@@ -164,11 +173,14 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                 icon: AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: _searchActive
-                      ? const Icon(Icons.close_rounded,
-                          key: ValueKey('close'), color: AppColors.textPrimary)
-                      : const Icon(Icons.search_rounded,
-                          key: ValueKey('search'),
-                          color: AppColors.textSecondary),
+                      ? Icon(
+                          Icons.close_rounded,
+                          key: const ValueKey('close'),
+                          color: colors.onSurface,
+                        )
+                      : Icon(Icons.search_rounded,
+                          key: const ValueKey('search'),
+                          color: colors.onSurfaceVariant),
                 ),
                 onPressed: _toggleSearch,
                 tooltip: _searchActive ? 'Close search' : 'Search',
@@ -255,6 +267,7 @@ class _MonthSelector extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final colors = Theme.of(context).colorScheme;
     final monthLabel = DateFormat(
       'MMMM yyyy',
     ).format(DateTime(state.selectedYear, state.selectedMonth));
@@ -273,10 +286,10 @@ class _MonthSelector extends ConsumerWidget {
             child: Text(
               monthLabel,
               textAlign: TextAlign.center,
-              style: const TextStyle(
+              style: TextStyle(
                 fontSize: 16,
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: colors.onSurface,
               ),
             ),
           ),
@@ -300,20 +313,22 @@ class _NavButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: Container(
         width: R.s(36),
         height: R.s(36),
         decoration: BoxDecoration(
-          color: AppColors.surfaceVariant,
+          color: colors.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(R.s(10)),
         ),
         child: Icon(
           icon,
           size: R.s(20),
-          color:
-              onTap == null ? AppColors.textDisabled : AppColors.textSecondary,
+          color: onTap == null
+              ? colors.onSurface.withValues(alpha: 0.38)
+              : colors.onSurfaceVariant,
         ),
       ),
     );
@@ -326,11 +341,12 @@ class _MonthSummaryBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
       margin: EdgeInsets.fromLTRB(R.md, 0, R.md, R.s(8)),
       padding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.s(10)),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
+        color: colors.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(R.s(14)),
       ),
       child: Row(
@@ -386,6 +402,7 @@ class _SummaryItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Expanded(
       flex: 3,
       child: Column(
@@ -395,7 +412,7 @@ class _SummaryItem extends StatelessWidget {
             style: TextStyle(
               fontSize: R.t(11),
               fontWeight: FontWeight.w500,
-              color: AppColors.textTertiary,
+              color: colors.onSurfaceVariant,
             ),
           ),
           SizedBox(height: R.s(2)),
@@ -428,6 +445,7 @@ class _ExpenseGroupedList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     final groups = _grouped;
     final keys = groups.keys.toList();
 
@@ -475,9 +493,9 @@ class _ExpenseGroupedList extends StatelessWidget {
             ),
             Container(
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: colors.surface,
                 borderRadius: BorderRadius.circular(R.md),
-                border: Border.all(color: AppColors.border),
+                border: Border.all(color: colors.outlineVariant),
               ),
               child: ListView.separated(
                 primary: false,
@@ -562,6 +580,7 @@ class _FilterSheetState extends State<_FilterSheet> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return DraggableScrollableSheet(
       initialChildSize: 0.75,
       minChildSize: 0.5,
@@ -570,7 +589,7 @@ class _FilterSheetState extends State<_FilterSheet> {
       builder: (context, scrollController) {
         return Container(
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: colors.surface,
             borderRadius: BorderRadius.vertical(top: Radius.circular(R.lg)),
           ),
           child: Column(
@@ -598,14 +617,14 @@ class _FilterSheetState extends State<_FilterSheet> {
                       style: TextStyle(
                         fontSize: R.t(18),
                         fontWeight: FontWeight.w700,
-                        color: AppColors.textPrimary,
+                        color: colors.onSurface,
                       ),
                     ),
                     const Spacer(),
                     TextButton(
                       onPressed: _reset,
                       style: TextButton.styleFrom(
-                        foregroundColor: AppColors.textTertiary,
+                        foregroundColor: colors.onSurfaceVariant,
                         padding: EdgeInsets.symmetric(horizontal: R.sm),
                       ),
                       child: Text(
@@ -704,10 +723,12 @@ class _FilterSheetState extends State<_FilterSheet> {
                             decoration: BoxDecoration(
                               color: selected
                                   ? cat.color.withValues(alpha: 0.15)
-                                  : AppColors.background,
+                                  : colors.surfaceContainerHighest,
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: selected ? cat.color : AppColors.border,
+                                color: selected
+                                    ? cat.color
+                                    : colors.outlineVariant,
                                 width: selected ? 1.5 : 1,
                               ),
                             ),
@@ -726,7 +747,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                                         : FontWeight.w400,
                                     color: selected
                                         ? cat.color
-                                        : AppColors.textSecondary,
+                                        : colors.onSurfaceVariant,
                                   ),
                                 ),
                               ],
@@ -793,6 +814,7 @@ class _TypeChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return GestureDetector(
       onTap: onTap,
       child: AnimatedContainer(
@@ -801,10 +823,10 @@ class _TypeChip extends StatelessWidget {
         decoration: BoxDecoration(
           color: selected
               ? activeColor.withValues(alpha: 0.12)
-              : AppColors.background,
+              : colors.surfaceContainerHighest,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? activeColor : AppColors.border,
+            color: selected ? activeColor : colors.outlineVariant,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -813,14 +835,14 @@ class _TypeChip extends StatelessWidget {
           children: [
             Icon(icon,
                 size: 14,
-                color: selected ? activeColor : AppColors.textTertiary),
+                color: selected ? activeColor : colors.onSurfaceVariant),
             const SizedBox(width: 6),
             Text(
               label,
               style: TextStyle(
                 fontSize: 13,
                 fontWeight: selected ? FontWeight.w600 : FontWeight.w400,
-                color: selected ? activeColor : AppColors.textSecondary,
+                color: selected ? activeColor : colors.onSurfaceVariant,
               ),
             ),
           ],

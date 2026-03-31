@@ -35,6 +35,8 @@ dependencies:
 
   # Cloud & Networking
   dio: ^5.4.0
+  firebase_core: ^3.13.1
+  firebase_messaging: ^15.1.5
 
   # Export
   csv: ^6.0.0

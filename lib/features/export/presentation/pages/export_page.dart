@@ -1,10 +1,11 @@
 // Figma: Screen/Export
 import 'package:flutter/material.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/utils/responsive.dart';
@@ -237,22 +238,23 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     final fmt = DateFormat('d MMM yyyy');
     final allExpenses = ref.watch(expenseProvider).expenses;
     final filtered = _filteredExpenses(allExpenses);
     final expCount = filtered.length;
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.background,
+        backgroundColor: colorScheme.surfaceContainerLow,
         surfaceTintColor: Colors.transparent,
-        title: const Text('Export Data',
+        title: Text('Export Data',
             style: TextStyle(
-                fontWeight: FontWeight.w800, color: AppColors.textPrimary)),
+                fontWeight: FontWeight.w800, color: colorScheme.onSurface)),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_rounded,
-              color: AppColors.textPrimary),
+          icon:
+              Icon(Icons.arrow_back_ios_rounded, color: colorScheme.onSurface),
           onPressed: () => context.pop(),
         ),
       ),
@@ -463,7 +465,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
               padding:
                   EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(10)),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(R.s(12)),
                 border: Border.all(color: AppColors.border),
               ),
@@ -500,7 +502,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
             Container(
               padding: EdgeInsets.all(R.s(14)),
               decoration: BoxDecoration(
-                color: AppColors.surface,
+                color: Theme.of(context).colorScheme.surface,
                 borderRadius: BorderRadius.circular(R.s(12)),
                 border: Border.all(color: AppColors.border),
               ),
@@ -586,7 +588,7 @@ class _DateTile extends StatelessWidget {
         child: Container(
           padding: EdgeInsets.all(R.s(14)),
           decoration: BoxDecoration(
-            color: AppColors.surface,
+            color: Theme.of(context).colorScheme.surface,
             borderRadius: BorderRadius.circular(R.s(12)),
             border: Border.all(color: AppColors.border),
           ),
@@ -631,7 +633,7 @@ class _FormatChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.symmetric(horizontal: R.s(14), vertical: R.s(12)),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primaryExtraLight : AppColors.surface,
+          color: selected ? AppColors.primaryExtraLight : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(R.s(12)),
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
@@ -681,7 +683,7 @@ class _ChoicePill extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(8)),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primaryExtraLight : AppColors.surface,
+          color: selected ? AppColors.primaryExtraLight : Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(24),
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
@@ -723,7 +725,7 @@ class _PresetChip extends StatelessWidget {
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: R.s(10), vertical: R.s(8)),
         decoration: BoxDecoration(
-          color: AppColors.surface,
+          color: Theme.of(context).colorScheme.surface,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.border),
         ),

@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_empty_state.dart';
+import '../../../../core/design/components/ds_skeleton.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../shared/widgets/finflow_app_bar.dart';
+import '../../../expenses/domain/entities/expense_category.dart';
 import '../providers/budget_provider.dart';
 import '../widgets/budget_envelope_card.dart';
-import '../../../../core/design/components/ds_empty_state.dart';
-import '../../../../core/design/components/ds_skeleton.dart';
-import '../../../expenses/domain/entities/expense_category.dart';
 
 class BudgetsPage extends ConsumerWidget {
   const BudgetsPage({super.key});
@@ -20,6 +21,7 @@ class BudgetsPage extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     listenForProviderError<BudgetState>(
       ref: ref,
       context: context,
@@ -41,7 +43,7 @@ class BudgetsPage extends ConsumerWidget {
     void doCopy() => ref.read(budgetProvider.notifier).copyFromPreviousMonth();
 
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       appBar: FinFlowAppBar(
         title: 'Budgets',
         actions: [
@@ -132,7 +134,7 @@ class BudgetsPage extends ConsumerWidget {
                             style: TextStyle(
                               fontSize: R.t(11),
                               fontWeight: FontWeight.w700,
-                              color: AppColors.textTertiary,
+                              color: colors.onSurfaceVariant,
                               letterSpacing: 1.2,
                             ),
                           ),
@@ -462,7 +464,7 @@ class _BudgetVsActualSection extends StatelessWidget {
       margin: EdgeInsets.only(top: R.md),
       padding: EdgeInsets.all(R.md),
       decoration: BoxDecoration(
-        color: AppColors.surface,
+        color: Theme.of(context).colorScheme.surface,
         borderRadius: BorderRadius.circular(R.s(18)),
         border: Border.all(color: AppColors.border),
       ),
@@ -582,7 +584,7 @@ class _BudgetVsActualRow extends StatelessWidget {
                 // Track
                 Container(
                   height: R.s(7),
-                  color: AppColors.surfaceVariant,
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
                 ),
                 // Fill
                 TweenAnimationBuilder<double>(

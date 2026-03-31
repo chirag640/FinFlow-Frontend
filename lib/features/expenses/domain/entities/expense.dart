@@ -1,4 +1,5 @@
 import 'package:equatable/equatable.dart';
+
 import 'expense_category.dart';
 
 /// How often a recurring expense repeats.
@@ -32,8 +33,9 @@ class Expense extends Equatable {
   final bool isIncome;
   final bool isRecurring;
   final RecurringFrequency? recurringFrequency;
+  final DateTime updatedAt;
 
-  const Expense({
+  Expense({
     required this.id,
     required this.amount,
     required this.description,
@@ -43,7 +45,8 @@ class Expense extends Equatable {
     this.isIncome = false,
     this.isRecurring = false,
     this.recurringFrequency,
-  });
+    DateTime? updatedAt,
+  }) : updatedAt = updatedAt ?? DateTime.now();
 
   Expense copyWith({
     double? amount,
@@ -54,6 +57,7 @@ class Expense extends Equatable {
     bool? isIncome,
     bool? isRecurring,
     RecurringFrequency? recurringFrequency,
+    DateTime? updatedAt,
     bool clearRecurring = false,
   }) =>
       Expense(
@@ -68,6 +72,7 @@ class Expense extends Equatable {
         recurringFrequency: clearRecurring
             ? null
             : recurringFrequency ?? this.recurringFrequency,
+        updatedAt: updatedAt ?? DateTime.now(),
       );
 
   Map<String, dynamic> toJson() => {
@@ -80,6 +85,7 @@ class Expense extends Equatable {
         'isIncome': isIncome,
         'isRecurring': isRecurring,
         'recurringFrequency': recurringFrequency?.name,
+        'updatedAt': updatedAt.toIso8601String(),
       };
 
   factory Expense.fromJson(Map<String, dynamic> j) => Expense(
@@ -94,7 +100,17 @@ class Expense extends Equatable {
         recurringFrequency: j['recurringFrequency'] != null
             ? RecurringFrequency.fromString(j['recurringFrequency'] as String)
             : null,
+        updatedAt: _parseDateTime(j['updatedAt']) ??
+            _parseDateTime(j['date']) ??
+            DateTime.now(),
       );
+
+  static DateTime? _parseDateTime(dynamic raw) {
+    if (raw == null) return null;
+    if (raw is DateTime) return raw;
+    if (raw is String) return DateTime.tryParse(raw);
+    return null;
+  }
 
   @override
   List<Object?> get props => [
@@ -107,5 +123,6 @@ class Expense extends Equatable {
         isIncome,
         isRecurring,
         recurringFrequency,
+        updatedAt,
       ];
 }

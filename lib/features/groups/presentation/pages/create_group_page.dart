@@ -4,12 +4,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
-import '../../../../core/utils/responsive.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/ui/error_feedback.dart';
+import '../../../../core/utils/responsive.dart';
 import '../providers/group_provider.dart';
 
 class CreateGroupPage extends ConsumerStatefulWidget {
@@ -123,6 +124,7 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     listenForProviderError<GroupState>(
       ref: ref,
       context: context,
@@ -135,9 +137,10 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
       },
     );
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         leading: IconButton(
           icon: const Icon(Icons.close_rounded),
           onPressed: () => context.pop(),
@@ -166,7 +169,9 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
                     decoration: BoxDecoration(
                       color: selected
                           ? AppColors.primaryExtraLight
-                          : AppColors.surfaceVariant,
+                          : Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
                       borderRadius: BorderRadius.circular(R.s(14)),
                       border: Border.all(
                         color: selected ? AppColors.primary : AppColors.border,
@@ -198,7 +203,8 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
                 prefixText: '$_selectedEmoji  ',
                 prefixStyle: TextStyle(fontSize: R.t(16)),
                 filled: true,
-                fillColor: AppColors.surfaceVariant,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(R.s(14)),
                   borderSide: BorderSide.none,
@@ -246,7 +252,8 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
                           )
                         : null,
                 filled: true,
-                fillColor: AppColors.surfaceVariant,
+                fillColor:
+                    Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(R.s(14)),
                   borderSide: BorderSide.none,
@@ -269,7 +276,7 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
               SizedBox(height: R.s(6)),
               Container(
                 decoration: BoxDecoration(
-                  color: AppColors.surface,
+                  color: Theme.of(context).colorScheme.surface,
                   borderRadius: BorderRadius.circular(R.s(14)),
                   border: Border.all(color: AppColors.border),
                   boxShadow: [
@@ -412,7 +419,9 @@ class _MemberChip extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(6)),
       decoration: BoxDecoration(
-        color: isYou ? AppColors.primaryExtraLight : AppColors.surfaceVariant,
+        color: isYou
+            ? AppColors.primaryExtraLight
+            : Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: isYou ? AppColors.primary : AppColors.border),
       ),

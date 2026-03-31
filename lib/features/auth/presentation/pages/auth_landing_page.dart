@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/router/app_router.dart';
@@ -12,8 +13,9 @@ class AuthLandingPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colorScheme.surfaceContainerLow,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -155,7 +157,7 @@ class _FeaturePill extends StatelessWidget {
     return Container(
       padding: EdgeInsets.symmetric(horizontal: R.sm + R.xs, vertical: R.s(7)),
       decoration: BoxDecoration(
-        color: AppColors.surfaceVariant,
+        color: Theme.of(context).colorScheme.surfaceContainerHighest,
         borderRadius: BorderRadius.circular(999),
         border: Border.all(color: AppColors.border),
       ),

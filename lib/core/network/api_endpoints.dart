@@ -15,6 +15,7 @@ abstract class ApiEndpoints {
   static const String userProfile = '/users/me';
   static const String updatePin = '/users/pin';
   static const String userSearch = '/users/search';
+  static const String notificationDevices = '/notifications/devices';
 
   static const String expenses = '/expenses';
   static const String expenseSummary = '/expenses/summary';
@@ -32,10 +33,7 @@ abstract class ApiEndpoints {
   static const String budgets = '/budgets';
   static String budget(String id) => '/budgets/$id';
 
-  static const String investments = '/investments';
-  static String investment(String id) => '/investments/$id';
-  static const String investmentsNetWorth = '/investments/net-worth';
-
   static const String syncPush = '/sync/push';
   static const String syncPull = '/sync/pull';
+  static const String syncTelemetry = '/sync/telemetry';
 }

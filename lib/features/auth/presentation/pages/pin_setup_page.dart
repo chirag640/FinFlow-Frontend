@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../providers/auth_provider.dart';
@@ -138,11 +139,13 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
           '🔐'
         ),
     };
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: AppColors.surface,
+      backgroundColor: colorScheme.surfaceContainerLow,
       appBar: AppBar(
-        backgroundColor: AppColors.surface,
+        backgroundColor: colorScheme.surface,
+        foregroundColor: colorScheme.onSurface,
         leading: _step == _Step.confirmNew
             ? IconButton(
                 icon: const Icon(Icons.arrow_back_rounded),
