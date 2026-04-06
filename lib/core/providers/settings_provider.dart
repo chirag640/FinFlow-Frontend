@@ -1,7 +1,9 @@
 // lib/core/providers/settings_provider.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
 import '../storage/hive_service.dart';
+import '../utils/currency_formatter.dart';
 
 // ── Keys ──────────────────────────────────────────────────────────────────────
 abstract class _K {
@@ -82,6 +84,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
     final box = HiveService.settings;
     final modeStr = box.get(_K.themeMode, defaultValue: 'light') as String;
     final currency = box.get(_K.currency, defaultValue: 'INR') as String;
+    CurrencyFormatter.setCurrency(currency);
     final biometric = box.get(_K.biometricEnabled, defaultValue: false) as bool;
     final notifBudget =
         box.get(_K.notifBudgetAlerts, defaultValue: true) as bool;
@@ -117,6 +120,7 @@ class SettingsNotifier extends StateNotifier<SettingsState> {
   Future<void> setCurrency(String currency) async {
     await HiveService.settings.put(_K.currency, currency);
     state = state.copyWith(currency: currency);
+    CurrencyFormatter.setCurrency(currency);
   }
 
   Future<void> setBiometricEnabled(bool enabled) async {

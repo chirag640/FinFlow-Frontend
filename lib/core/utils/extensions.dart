@@ -10,10 +10,11 @@ extension BuildContextX on BuildContext {
   double get screenHeight => MediaQuery.of(this).size.height;
 
   void showSnack(String message, {bool isError = false}) {
+    final colors = Theme.of(this).colorScheme;
     ScaffoldMessenger.of(this).showSnackBar(
       SnackBar(
         content: Text(message),
-        backgroundColor: isError ? const Color(0xFFEF4444) : null,
+        backgroundColor: isError ? colors.error : null,
       ),
     );
   }

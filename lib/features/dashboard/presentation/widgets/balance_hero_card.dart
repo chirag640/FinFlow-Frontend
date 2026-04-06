@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
@@ -18,11 +19,7 @@ class BalanceHeroCard extends StatelessWidget {
       width: double.infinity,
       padding: EdgeInsets.all(R.lg),
       decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
+        gradient: AppColors.primaryGradient,
         borderRadius: BorderRadius.circular(R.lg),
         boxShadow: [
           BoxShadow(
@@ -83,9 +80,7 @@ class BalanceHeroCard extends StatelessWidget {
             isPositive ? '✓ Surplus balance' : '! Overspent',
             style: TextStyle(
               fontSize: R.t(13),
-              color: isPositive
-                  ? Colors.greenAccent.shade200
-                  : Colors.redAccent.shade100,
+              color: isPositive ? AppColors.successLight : AppColors.errorLight,
               fontWeight: FontWeight.w500,
             ),
           ),
@@ -99,7 +94,7 @@ class BalanceHeroCard extends StatelessWidget {
                   label: 'Income',
                   value: CurrencyFormatter.format(summary.totalIncome),
                   icon: Icons.arrow_downward_rounded,
-                  color: Colors.greenAccent,
+                  color: AppColors.successLight,
                 ),
               ),
               Container(
@@ -112,7 +107,7 @@ class BalanceHeroCard extends StatelessWidget {
                   label: 'Expenses',
                   value: CurrencyFormatter.format(summary.totalExpenses),
                   icon: Icons.arrow_upward_rounded,
-                  color: Colors.redAccent.shade100,
+                  color: AppColors.errorLight,
                   alignEnd: true,
                 ),
               ),
@@ -159,7 +154,7 @@ class _StatItem extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: R.t(11),
-                  color: Colors.white60,
+                  color: Colors.white.withValues(alpha: 0.72),
                 ),
               ),
             ],

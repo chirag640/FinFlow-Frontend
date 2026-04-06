@@ -7,6 +7,7 @@ import 'package:gap/gap.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/theme/radius.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../expenses/domain/entities/expense.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
@@ -262,7 +263,7 @@ class _TotalCard extends StatelessWidget {
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(R.s(20)),
+        borderRadius: AppRadius.card,
       ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text('Total spent in $year',
@@ -454,7 +455,7 @@ class _MonthlyBarChart extends StatelessWidget {
                       ? AppColors.primary
                       : AppColors.primaryExtraLight,
                   width: 16,
-                  borderRadius: BorderRadius.circular(4),
+                  borderRadius: AppRadius.xs,
                 ),
               ],
             );
@@ -560,13 +561,13 @@ class _IncomeVsExpenseChart extends StatelessWidget {
                         toY: income[i],
                         color: incomeColor,
                         width: 8,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: AppRadius.tiny,
                       ),
                       BarChartRodData(
                         toY: expenses[i],
                         color: expenseColor,
                         width: 8,
-                        borderRadius: BorderRadius.circular(3),
+                        borderRadius: AppRadius.tiny,
                       ),
                     ],
                   );
@@ -640,7 +641,7 @@ class _CategoryRow extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: R.s(14), vertical: R.s(12)),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(R.s(12)),
+        borderRadius: AppRadius.md,
         border: Border.all(color: AppColors.border),
       ),
       child: Row(children: [
@@ -649,7 +650,7 @@ class _CategoryRow extends StatelessWidget {
           height: R.s(36),
           decoration: BoxDecoration(
             color: category.color.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(R.s(10)),
+            borderRadius: AppRadius.smPlus,
           ),
           child: Center(
               child: Text(category.emoji, style: TextStyle(fontSize: R.t(18)))),
@@ -740,7 +741,7 @@ class _RecurringBreakdown extends StatelessWidget {
         Gap(R.s(14)),
         // Split bar
         ClipRRect(
-          borderRadius: BorderRadius.circular(R.s(6)),
+          borderRadius: AppRadius.micro,
           child: SizedBox(
             height: R.s(10),
             child: Row(children: [
@@ -817,7 +818,7 @@ class _MiniStatTile extends StatelessWidget {
         padding: EdgeInsets.all(R.s(12)),
         decoration: BoxDecoration(
           color: color.withValues(alpha: 0.08),
-          borderRadius: BorderRadius.circular(R.s(12)),
+          borderRadius: AppRadius.md,
           border: Border.all(color: color.withValues(alpha: 0.2)),
         ),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1155,7 +1156,7 @@ class _SpendingHeatmapState extends State<_SpendingHeatmap> {
               height: _cellSize,
               decoration: BoxDecoration(
                 color: cellColor(amount),
-                borderRadius: BorderRadius.circular(2),
+                borderRadius: AppRadius.xxs,
                 border: isSelected
                     ? Border.all(color: AppColors.primary, width: 1.5)
                     : null,
@@ -1194,7 +1195,7 @@ class _SpendingHeatmapState extends State<_SpendingHeatmap> {
                   EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.sm),
               decoration: BoxDecoration(
                 color: AppColors.darkSurface,
-                borderRadius: BorderRadius.circular(R.s(10)),
+                borderRadius: AppRadius.smPlus,
               ),
               child: Row(mainAxisSize: MainAxisSize.min, children: [
                 Text(
@@ -1234,7 +1235,7 @@ class _SpendingHeatmapState extends State<_SpendingHeatmap> {
                         ? AppColors.border.withValues(alpha: 0.45)
                         : AppColors.primary
                             .withValues(alpha: [0.22, 0.45, 0.70, 1.0][i - 1]),
-                    borderRadius: BorderRadius.circular(R.s(2)),
+                    borderRadius: AppRadius.xxs,
                   ),
                 ),
               ),
@@ -1377,7 +1378,7 @@ class _DayOfWeekChart extends StatelessWidget {
                             ? AppColors.primary
                             : AppColors.primary.withValues(alpha: 0.28),
                         width: 26,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: AppRadius.micro,
                       ),
                     ],
                   );

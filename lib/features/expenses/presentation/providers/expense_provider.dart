@@ -206,9 +206,10 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     );
     // Save locally first for instant UI feedback
     await _ds.save(expense);
+    if (!mounted) return;
     state = state.copyWith(expenses: [expense, ...state.expenses]);
     // Push to API immediately when online; batch sync handles offline fallback
-    if (_isOnline) {
+    if (_isOnline && mounted) {
       try {
         final dio = _ref.read(dioProvider);
         await dio.post(ApiEndpoints.expenses, data: {
@@ -224,6 +225,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
           if (recurringFrequency != null)
             'recurringRule': recurringFrequency.name,
         });
+        if (!mounted) return;
         await _ds.clearPendingUpsert(expense.id);
         if (mounted) {
           state = state.copyWith(error: null);
@@ -240,13 +242,15 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
 
   Future<void> deleteExpense(String id) async {
     await _ds.delete(id);
+    if (!mounted) return;
     state = state.copyWith(
       expenses: state.expenses.where((e) => e.id != id).toList(),
     );
-    if (_isOnline) {
+    if (_isOnline && mounted) {
       try {
         final dio = _ref.read(dioProvider);
         await dio.delete(ApiEndpoints.expense(id));
+        if (!mounted) return;
         await _ds.clearPendingDeletion(id);
         if (mounted) {
           state = state.copyWith(error: null);
@@ -306,12 +310,13 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
   Future<void> updateExpense(Expense updated) async {
     final localUpdated = updated.copyWith(updatedAt: DateTime.now());
     await _ds.save(localUpdated);
+    if (!mounted) return;
     state = state.copyWith(
       expenses: state.expenses
           .map((e) => e.id == updated.id ? localUpdated : e)
           .toList(),
     );
-    if (_isOnline) {
+    if (_isOnline && mounted) {
       try {
         final dio = _ref.read(dioProvider);
         await dio.patch(ApiEndpoints.expense(localUpdated.id), data: {
@@ -325,6 +330,7 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
           if (localUpdated.recurringFrequency != null)
             'recurringRule': localUpdated.recurringFrequency!.name,
         });
+        if (!mounted) return;
         await _ds.clearPendingUpsert(localUpdated.id);
         if (mounted) {
           state = state.copyWith(error: null);
@@ -351,6 +357,11 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
 
   void clearFilters() {
     state = state.copyWith(activeFilters: const ExpenseFilters());
+  }
+
+  void refresh() {
+    state = state.copyWith(error: null);
+    _load();
   }
 
   void setMonth(int year, int month) {

@@ -173,7 +173,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
       return BudgetEnvelope(
           budget: b, spentAmount: spent, carryForwardAmount: carry);
     }).toList();
-    state = state.copyWith(envelopes: envelopes);
+    state = state.copyWith(envelopes: envelopes, isLoading: false);
 
     // ── Notification threshold detection ────────────────────────────────────
     if (_initialLoadDone && _ref.read(settingsProvider).notifBudgetAlerts) {
@@ -291,6 +291,13 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
 
   /// Refresh spent amounts based on current expense state
   void refresh() => _load();
+
+  Future<void> reloadFromCloud() async {
+    state = state.copyWith(isLoading: true, error: null);
+    await _syncFromCloud();
+    if (!mounted) return;
+    state = state.copyWith(isLoading: false);
+  }
 
   DateTime? _parseDateTime(dynamic raw) {
     if (raw == null) return null;

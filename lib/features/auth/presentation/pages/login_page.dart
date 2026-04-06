@@ -6,6 +6,9 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_async_state.dart';
+import '../../../../core/design/components/ds_button.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/responsive.dart';
@@ -51,26 +54,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     showErrorSnackBar(context, msg);
   }
 
+  void _showInfo(String msg) {
+    showInfoSnackBar(context, msg);
+  }
+
+  void _showSuccess(String msg) {
+    showSuccessSnackBar(context, msg);
+  }
+
   @override
   Widget build(BuildContext context) {
     R.init(context);
     final authState = ref.watch(cloudAuthProvider);
-
-    listenForProviderError(
-      ref: ref,
-      context: context,
-      provider: cloudAuthProvider,
-      errorSelector: (s) => s.error,
-    );
 
     final screenWidth = MediaQuery.sizeOf(context).width;
     final hPad = screenWidth > 480 ? (screenWidth - 440) / 2 : 24.0;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon:
@@ -96,7 +101,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   borderRadius: BorderRadius.circular(R.s(14)),
                 ),
                 child: Center(
-                  child: Text('?',
+                  child: Text('₹',
                       style: TextStyle(
                           fontSize: R.t(26),
                           fontWeight: FontWeight.w900,
@@ -114,6 +119,19 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         color: AppColors.textSecondary,
                       )).animate().fadeIn(delay: 150.ms),
+              const Gap(14),
+              if (authState.isLoading)
+                const DSAsyncState.loading(
+                  compact: true,
+                  title: 'Signing you in...',
+                  message: 'Securing your session and syncing your profile.',
+                )
+              else if (authState.error != null)
+                DSAsyncState.error(
+                  compact: true,
+                  title: 'Sign-in failed',
+                  message: authState.error,
+                ),
               const Gap(36),
               // Email/Password form
               Form(
@@ -161,28 +179,10 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 ]),
               ).animate().fadeIn(delay: 200.ms),
               const Gap(24),
-              SizedBox(
-                width: double.infinity,
-                height: R.s(52),
-                child: ElevatedButton(
-                  onPressed: authState.isLoading ? null : _login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(R.s(14))),
-                    elevation: 0,
-                  ),
-                  child: authState.isLoading
-                      ? const SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text('Sign In',
-                          style: TextStyle(
-                              fontSize: R.t(16), fontWeight: FontWeight.w700)),
-                ),
+              DSButton(
+                label: 'Sign In',
+                onPressed: authState.isLoading ? null : _login,
+                isLoading: authState.isLoading,
               ).animate().fadeIn(delay: 250.ms),
               const Gap(20),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -209,20 +209,28 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         labelText: label,
         prefixIcon: Icon(icon, color: AppColors.textTertiary, size: R.s(20)),
         filled: true,
-        fillColor: Theme.of(context).colorScheme.surface,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
           borderSide: const BorderSide(color: AppColors.primary, width: 2),
         ),
       );
+
+  InputDecoration _dialogDecoration(
+    String label,
+    IconData icon, {
+    String? hintText,
+  }) {
+    return _inputDecoration(label, icon).copyWith(hintText: hintText);
+  }
 
   Future<void> _forgotPassword() async {
     final emailCtrl = TextEditingController(text: _emailCtrl.text.trim());
@@ -231,13 +239,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
+        builder: (ctx, setState) => DSDialog(
           title: const Text('Forgot Password'),
           content: TextField(
             controller: emailCtrl,
             keyboardType: TextInputType.emailAddress,
-            decoration: const InputDecoration(
-              labelText: 'Email',
+            decoration: _dialogDecoration(
+              'Email',
+              Icons.email_outlined,
               hintText: 'you@example.com',
             ),
           ),
@@ -263,7 +272,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       setState(() => loading = false);
                       Navigator.of(ctx).pop();
                       if (ok) {
-                        _showError('Reset code sent if this email exists.');
+                        _showInfo('Reset code sent if this email exists.');
                         await _showResetPasswordDialog(email);
                       }
                     },
@@ -290,7 +299,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     await showDialog<void>(
       context: context,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
+        builder: (ctx, setState) => DSDialog(
           title: const Text('Reset Password'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -298,16 +307,18 @@ class _LoginPageState extends ConsumerState<LoginPage> {
               TextField(
                 controller: codeCtrl,
                 keyboardType: TextInputType.number,
-                decoration: const InputDecoration(
-                  labelText: '6-digit code',
+                decoration: _dialogDecoration(
+                  '6-digit code',
+                  Icons.numbers_rounded,
                 ),
               ),
               const Gap(12),
               TextField(
                 controller: passCtrl,
                 obscureText: true,
-                decoration: const InputDecoration(
-                  labelText: 'New password',
+                decoration: _dialogDecoration(
+                  'New password',
+                  Icons.lock_outline_rounded,
                 ),
               ),
             ],
@@ -343,7 +354,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       setState(() => loading = false);
                       if (ok) {
                         Navigator.of(ctx).pop();
-                        _showError(
+                        _showSuccess(
                             'Password reset successful. Please sign in.');
                       }
                     },

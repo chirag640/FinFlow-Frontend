@@ -3,6 +3,7 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/responsive.dart';
@@ -15,7 +16,7 @@ class AuthLandingPage extends StatelessWidget {
     R.init(context);
     final colorScheme = Theme.of(context).colorScheme;
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surface,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -158,7 +159,7 @@ class _FeaturePill extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: R.sm + R.xs, vertical: R.s(7)),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: AppRadius.fullAll,
         border: Border.all(color: AppColors.border),
       ),
       child: Text(

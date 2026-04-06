@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/theme/radius.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../shared/widgets/finflow_app_bar.dart';
@@ -64,51 +65,74 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
         title: 'FinFlow',
         showLogo: true,
         actions: [
-          IconButton(
-            icon: const Icon(Icons.auto_awesome_rounded),
-            onPressed: () => context.push(AppRoutes.aiInsights),
-            tooltip: 'AI Insights',
+          Semantics(
+            label: 'Open AI spending insights',
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.auto_awesome_rounded),
+              onPressed: () => context.push(AppRoutes.aiInsights),
+              tooltip: 'AI Insights',
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.savings_rounded),
-            onPressed: () => context.push(AppRoutes.goals),
-            tooltip: 'Savings Goals',
+          Semantics(
+            label: 'Open savings goals',
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.savings_rounded),
+              onPressed: () => context.push(AppRoutes.goals),
+              tooltip: 'Savings Goals',
+            ),
           ),
           // Sync status button — tap to force sync, icon shows sync state
-          IconButton(
-            icon: syncState.isSyncing
-                ? SizedBox(
-                    width: R.s(18),
-                    height: R.s(18),
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      color: AppColors.primary,
-                    ),
-                  )
+          Semantics(
+            label: syncState.isSyncing
+                ? 'Syncing expenses with cloud'
                 : syncState.error != null
-                    ? const Icon(Icons.sync_problem_rounded,
-                        color: AppColors.error)
-                    : Icon(
-                        syncState.lastSyncTime != null
-                            ? Icons.cloud_done_rounded
-                            : Icons.cloud_upload_rounded,
-                        color: syncState.lastSyncTime != null
-                            ? AppColors.success
-                            : colors.onSurfaceVariant,
+                    ? 'Sync error, tap to retry synchronization'
+                    : syncState.lastSyncTime != null
+                        ? 'Data synced, tap to sync again'
+                        : 'Tap to sync expenses with cloud',
+            button: true,
+            enabled: !syncState.isSyncing,
+            child: IconButton(
+              icon: syncState.isSyncing
+                  ? SizedBox(
+                      width: R.s(18),
+                      height: R.s(18),
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: AppColors.primary,
                       ),
-            onPressed: syncState.isSyncing
-                ? null
-                : () => ref.read(syncProvider.notifier).sync(),
-            tooltip: syncState.error != null
-                ? 'Sync error — tap to retry'
-                : syncState.lastSyncTime != null
-                    ? 'Synced — tap to sync again'
-                    : 'Tap to sync with cloud',
+                    )
+                  : syncState.error != null
+                      ? const Icon(Icons.sync_problem_rounded,
+                          color: AppColors.error)
+                      : Icon(
+                          syncState.lastSyncTime != null
+                              ? Icons.cloud_done_rounded
+                              : Icons.cloud_upload_rounded,
+                          color: syncState.lastSyncTime != null
+                              ? AppColors.success
+                              : colors.onSurfaceVariant,
+                        ),
+              onPressed: syncState.isSyncing
+                  ? null
+                  : () => ref.read(syncProvider.notifier).sync(),
+              tooltip: syncState.error != null
+                  ? 'Sync error — tap to retry'
+                  : syncState.lastSyncTime != null
+                      ? 'Synced — tap to sync again'
+                      : 'Tap to sync with cloud',
+            ),
           ),
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-            tooltip: 'Notifications',
+          Semantics(
+            label: 'View notifications',
+            button: true,
+            child: IconButton(
+              icon: const Icon(Icons.notifications_outlined),
+              onPressed: () {},
+              tooltip: 'Notifications',
+            ),
           ),
         ],
       ),
@@ -467,9 +491,9 @@ class _SummaryChip extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: bgColor,
-      borderRadius: BorderRadius.circular(R.s(20)),
+      borderRadius: AppRadius.card,
       child: InkWell(
-        borderRadius: BorderRadius.circular(R.s(20)),
+        borderRadius: AppRadius.card,
         onTap: onTap,
         child: Padding(
           padding: EdgeInsets.fromLTRB(R.s(10), R.s(7), R.s(14), R.s(7)),
@@ -645,7 +669,7 @@ class _InsightCard extends StatelessWidget {
       padding: EdgeInsets.all(R.s(14)),
       decoration: BoxDecoration(
         color: Theme.of(context).colorScheme.surface,
-        borderRadius: BorderRadius.circular(R.s(14)),
+        borderRadius: AppRadius.mdPlus,
         border: Border.all(color: AppColors.border),
       ),
       child: Column(
@@ -785,7 +809,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                 height: 4,
                 decoration: BoxDecoration(
                   color: AppColors.border,
-                  borderRadius: BorderRadius.circular(2),
+                  borderRadius: AppRadius.xxs,
                 ),
               ),
             ),
@@ -821,7 +845,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
               padding: const EdgeInsets.all(3),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: AppRadius.smPlus,
               ),
               child: Row(
                 children: [
@@ -856,7 +880,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
               ),
               decoration: InputDecoration(
                 hintText: '0.00',
-                prefixText: '₹  ',
+                prefixText: '${CurrencyFormatter.symbol()}  ',
                 hintStyle: const TextStyle(
                   fontSize: 28,
                   fontWeight: FontWeight.w800,
@@ -871,7 +895,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                 fillColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: AppRadius.mdPlus,
                   borderSide: BorderSide.none,
                 ),
                 contentPadding:
@@ -897,7 +921,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                 fillColor:
                     Theme.of(context).colorScheme.surfaceContainerHighest,
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: AppRadius.mdPlus,
                   borderSide: BorderSide.none,
                 ),
                 contentPadding:
@@ -927,7 +951,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                             : Theme.of(context)
                                 .colorScheme
                                 .surfaceContainerHighest,
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: AppRadius.card,
                         border: Border.all(
                           color: isSel ? cat.color : AppColors.border,
                           width: isSel ? 1.5 : 1,
@@ -961,8 +985,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                       _isIncome ? AppColors.success : AppColors.primary,
                   foregroundColor: Colors.white,
                   padding: const EdgeInsets.symmetric(vertical: 15),
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14)),
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.mdPlus),
                 ),
                 child: _isSaving
                     ? const SizedBox(
@@ -1006,7 +1029,7 @@ class _TypeToggle extends StatelessWidget {
             color: selected
                 ? Theme.of(context).colorScheme.surface
                 : Colors.transparent,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: AppRadius.sm,
             boxShadow: selected
                 ? [
                     BoxShadow(

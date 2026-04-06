@@ -10,6 +10,7 @@ import 'core/providers/settings_provider.dart';
 import 'core/router/app_router.dart';
 import 'core/services/notification_service.dart';
 import 'core/storage/hive_service.dart';
+import 'core/utils/currency_formatter.dart';
 import 'features/sync/presentation/providers/sync_provider.dart';
 
 Future<void> main() async {
@@ -102,6 +103,8 @@ class _FinFlowAppState extends ConsumerState<FinFlowApp> {
   Widget build(BuildContext context) {
     final router = ref.watch(appRouterProvider);
     final themeMode = ref.watch(settingsProvider.select((s) => s.themeMode));
+    final currency = ref.watch(settingsProvider.select((s) => s.currency));
+    CurrencyFormatter.setCurrency(currency);
     final platformBrightness =
         WidgetsBinding.instance.platformDispatcher.platformBrightness;
     final useDark = themeMode == ThemeMode.dark ||

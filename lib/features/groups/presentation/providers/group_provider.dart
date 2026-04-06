@@ -306,23 +306,39 @@ final groupProvider = StateNotifierProvider<GroupNotifier, GroupState>((ref) {
 class GroupExpenseState {
   final List<GroupExpense> expenses;
   final bool isLoading;
+  final bool isLoadingMore;
   final String? error;
+  final String? nextCursor;
+  final bool hasMore;
+  final int total;
 
   const GroupExpenseState({
     this.expenses = const [],
     this.isLoading = false,
+    this.isLoadingMore = false,
     this.error,
+    this.nextCursor,
+    this.hasMore = false,
+    this.total = 0,
   });
 
   GroupExpenseState copyWith({
     List<GroupExpense>? expenses,
     bool? isLoading,
+    bool? isLoadingMore,
     Object? error = _sentinel,
+    Object? nextCursor = _sentinel,
+    bool? hasMore,
+    int? total,
   }) =>
       GroupExpenseState(
         expenses: expenses ?? this.expenses,
         isLoading: isLoading ?? this.isLoading,
+        isLoadingMore: isLoadingMore ?? this.isLoadingMore,
         error: identical(error, _sentinel) ? this.error : error as String?,
+        nextCursor: identical(nextCursor, _sentinel) ? this.nextCursor : nextCursor as String?,
+        hasMore: hasMore ?? this.hasMore,
+        total: total ?? this.total,
       );
 
   static const _sentinel = Object();
@@ -384,20 +400,79 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpenseState> {
     if (!_isConnected) return;
     try {
       final dio = _ref.read(dioProvider);
-      final res = await dio.get(ApiEndpoints.group(_groupId));
+      // Use the new paginated endpoint for initial load
+      final res = await dio.get(
+        '${ApiEndpoints.group(_groupId)}/expenses',
+        queryParameters: {'take': 50, 'sortBy': 'date', 'order': 'desc'},
+      );
       final data = res.data['data'] as Map<String, dynamic>;
-      final serverExpenses = (data['expenses'] as List?) ?? [];
+      final serverExpenses = (data['data'] as List?) ?? [];
+      
       for (final e in serverExpenses) {
         final exp = GroupExpense.fromServerJson(e as Map<String, dynamic>);
         await _ds.saveGroupExpense(exp);
       }
+      
       if (mounted) {
         _load();
-        state = state.copyWith(error: null);
+        state = state.copyWith(
+          error: null,
+          nextCursor: data['nextCursor'] as String?,
+          hasMore: (data['hasMore'] as bool?) ?? false,
+          total: (data['total'] as int?) ?? 0,
+        );
       }
     } on DioException catch (e) {
       if (mounted) {
         state = state.copyWith(error: formatDioError(e));
+      }
+    }
+  }
+
+  /// Load more expenses using cursor pagination
+  Future<void> loadMore() async {
+    if (!_isConnected || state.isLoadingMore || !state.hasMore || state.nextCursor == null) {
+      return;
+    }
+
+    state = state.copyWith(isLoadingMore: true);
+
+    try {
+      final dio = _ref.read(dioProvider);
+      final res = await dio.get(
+        '${ApiEndpoints.group(_groupId)}/expenses',
+        queryParameters: {
+          'cursor': state.nextCursor,
+          'take': 20,
+          'sortBy': 'date',
+          'order': 'desc',
+        },
+      );
+      final data = res.data['data'] as Map<String, dynamic>;
+      final serverExpenses = (data['data'] as List?) ?? [];
+      
+      final newExpenses = <GroupExpense>[];
+      for (final e in serverExpenses) {
+        final exp = GroupExpense.fromServerJson(e as Map<String, dynamic>);
+        await _ds.saveGroupExpense(exp);
+        newExpenses.add(exp);
+      }
+
+      if (mounted) {
+        state = state.copyWith(
+          expenses: [...state.expenses, ...newExpenses],
+          isLoadingMore: false,
+          nextCursor: data['nextCursor'] as String?,
+          hasMore: (data['hasMore'] as bool?) ?? false,
+          error: null,
+        );
+      }
+    } on DioException catch (e) {
+      if (mounted) {
+        state = state.copyWith(
+          isLoadingMore: false,
+          error: formatDioError(e),
+        );
       }
     }
   }

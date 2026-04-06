@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
@@ -105,27 +106,19 @@ class ExpenseDetailPage extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref) {
-    showDialog<bool>(
+    DSConfirmDialog.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete expense?'),
-        content: Text(
-            'Remove "${expense.description}" from your records? This cannot be undone.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(expenseProvider.notifier).deleteExpense(expense.id);
-              context.pop();
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+      title: 'Delete expense?',
+      message:
+          'Remove "${expense.description}" from your records? This cannot be undone.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    ).then((confirmed) {
+      if (confirmed == true && context.mounted) {
+        ref.read(expenseProvider.notifier).deleteExpense(expense.id);
+        context.pop();
+      }
+    });
   }
 }
 
@@ -138,9 +131,10 @@ class _AmountHero extends StatelessWidget {
   Widget build(BuildContext context) {
     R.init(context);
     final isIncome = expense.isIncome;
+    // Use theme colors instead of hardcoded hex values
     final bgGradient = isIncome
-        ? [const Color(0xFF10B981), const Color(0xFF059669)]
-        : [AppColors.primary, const Color(0xFF3730A3)];
+        ? [AppColors.success, const Color(0xFF059669)]
+        : [AppColors.primary, AppColors.primaryDark];
 
     return Container(
       width: double.infinity,

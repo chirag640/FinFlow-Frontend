@@ -65,7 +65,7 @@ class _PinKeyState extends State<_PinKey> {
     R.init(context);
     final isDelete = widget.label == 'del';
     final colors = Theme.of(context).colorScheme;
-    final baseSurface = Theme.of(context).scaffoldBackgroundColor;
+    final baseSurface = colors.surface;
 
     return GestureDetector(
       onTapDown: (_) => setState(() => _pressed = true),

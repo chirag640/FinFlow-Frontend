@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
@@ -53,7 +54,8 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
 
   void _onSearchChanged(String val) {
     _debounce?.cancel();
-    if (val.trim().length < 2) {
+    final query = val.trim();
+    if (query.length < 2) {
       setState(() {
         _searchResults = [];
         _isSearching = false;
@@ -61,11 +63,14 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
       return;
     }
     setState(() => _isSearching = true);
+    // Increased debounce to 600ms for better network efficiency
     _debounce = Timer(
-        const Duration(milliseconds: 350), () => _searchUsers(val.trim()));
+        const Duration(milliseconds: 600), () => _searchUsers(query));
   }
 
   Future<void> _searchUsers(String q) async {
+    // Skip if already unmounted or query changed
+    if (!mounted) return;
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get(
@@ -79,8 +84,19 @@ class _CreateGroupPageState extends ConsumerState<CreateGroupPage> {
           _isSearching = false;
         });
       }
-    } catch (_) {
-      if (mounted) setState(() => _isSearching = false);
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isSearching = false;
+          _searchResults = [];
+        });
+        // Only show error for non-network issues (network errors are expected offline)
+        if (e is! Exception) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Search failed. Try again.')),
+          );
+        }
+      }
     }
   }
 
@@ -422,7 +438,7 @@ class _MemberChip extends StatelessWidget {
         color: isYou
             ? AppColors.primaryExtraLight
             : Theme.of(context).colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(999),
+        borderRadius: AppRadius.fullAll,
         border: Border.all(color: isYou ? AppColors.primary : AppColors.border),
       ),
       child: Row(

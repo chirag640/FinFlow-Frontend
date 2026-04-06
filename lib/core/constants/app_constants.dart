@@ -31,6 +31,7 @@ abstract class AppConstants {
   static const String biometricEnabledKey = 'ff_biometric';
   static const String userNameKey = 'ff_user_name';
   static const String monthlyIncomeKey = 'ff_monthly_income';
+  static const String cloudUserKey = 'ff_cloud_user';
 
   // Auth state flags (stored in Hive settings box)
   static const String hasAccountKey = 'ff_has_account';

@@ -8,6 +8,7 @@ abstract class AppRadius {
   static const double xl = 20.0;
   static const double xxl = 24.0;
   static const double pill = 999.0;
+  static const double full = 999.0;
 
   static BorderRadius get xsAll => BorderRadius.circular(xs);
   static BorderRadius get smAll => BorderRadius.circular(sm);
@@ -16,4 +17,5 @@ abstract class AppRadius {
   static BorderRadius get xlAll => BorderRadius.circular(xl);
   static BorderRadius get xxlAll => BorderRadius.circular(xxl);
   static BorderRadius get pillAll => BorderRadius.circular(pill);
+  static BorderRadius get fullAll => BorderRadius.circular(full);
 }

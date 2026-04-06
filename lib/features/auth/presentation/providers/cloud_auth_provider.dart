@@ -1,13 +1,16 @@
 ﻿import 'dart:async';
+import 'dart:convert';
 
 import 'package:dio/dio.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 
+import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/network/network_error.dart';
 import '../../../../core/services/notification_service.dart';
+import '../../../../core/storage/hive_service.dart';
 import 'auth_provider.dart';
 
 // ── Models ────────────────────────────────────────────────────────────────────
@@ -20,6 +23,7 @@ class CloudUser {
   final String currency;
   final bool emailVerified;
   final double monthlyBudget;
+  final bool hasPin;
 
   const CloudUser({
     required this.id,
@@ -30,6 +34,7 @@ class CloudUser {
     required this.currency,
     required this.emailVerified,
     required this.monthlyBudget,
+    this.hasPin = false,
   });
 
   factory CloudUser.fromJson(Map<String, dynamic> j) {
@@ -42,8 +47,21 @@ class CloudUser {
       currency: (j['currency'] as String?) ?? 'INR',
       emailVerified: (j['emailVerified'] as bool?) ?? false,
       monthlyBudget: ((j['monthlyBudget'] as num?) ?? 0).toDouble(),
+      hasPin: (j['hasPin'] as bool?) ?? false,
     );
   }
+
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'name': name,
+        'email': email,
+        'username': username,
+        'avatarUrl': avatarUrl,
+        'currency': currency,
+        'emailVerified': emailVerified,
+        'monthlyBudget': monthlyBudget,
+        'hasPin': hasPin,
+      };
 }
 
 class CloudSession {
@@ -139,15 +157,43 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
       return;
     }
 
-    // Token exists in storage — optimistically mark connected so the
-    // Settings page immediately shows the correct "Connected" state
-    // instead of flashing "Connect to Cloud" during the API round-trip.
-    state = state.copyWith(isConnected: true, isLoading: true);
+    final cachedUser = await _readCachedUser();
+    if (cachedUser != null) {
+      state = state.copyWith(
+        isConnected: true,
+        isLoading: false,
+        user: cachedUser,
+      );
+
+      // Hydrate local auth/profile immediately from cache so startup is fast
+      // even when the backend is cold, then refresh from network in background.
+      final authNotifier = _ref.read(authStateProvider.notifier);
+      if (cachedUser.name.trim().isNotEmpty) {
+        unawaited(
+          authNotifier.syncFromCloud(
+            name: cachedUser.name,
+            email: cachedUser.email,
+            currency: cachedUser.currency,
+            monthlyBudget: cachedUser.monthlyBudget,
+            hasPinOnServer: cachedUser.hasPin,
+          ),
+        );
+      }
+    } else {
+      // Token exists in storage — optimistically mark connected so the
+      // Settings page immediately shows the correct "Connected" state
+      // instead of flashing "Connect to Cloud" during the API round-trip.
+      state = state.copyWith(isConnected: true, isLoading: true);
+    }
 
     try {
-      final res = await _dio.get(ApiEndpoints.me);
+      final res = await _dio.get(
+        ApiEndpoints.me,
+        options: Options(receiveTimeout: const Duration(seconds: 12)),
+      );
       final userData = res.data['data'] as Map<String, dynamic>;
       final user = CloudUser.fromJson(userData);
+      await _cacheUser(user);
 
       final authNotifier = _ref.read(authStateProvider.notifier);
       await authNotifier.markAccountCreated();
@@ -176,6 +222,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
           email: user.email,
           currency: user.currency,
           monthlyBudget: user.monthlyBudget,
+          hasPinOnServer: user.hasPin,
         );
       }
     } on DioException catch (e) {
@@ -183,6 +230,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
         // Tokens genuinely invalid (expired or revoked) — clear and notify user
         await _storage.delete(key: TokenKeys.accessToken);
         await _storage.delete(key: TokenKeys.refreshToken);
+        await _clearCachedUser();
         state = const CloudAuthState(
           error: 'Session expired — please sign in again',
         );
@@ -260,6 +308,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
       // The login response structure is: { data: { user: { ... }, accessToken: "..." } }
       final userData = res.data['data']['user'] as Map<String, dynamic>;
       final user = CloudUser.fromJson(userData);
+      await _cacheUser(user);
 
       // Always sync local auth state from server so the latest name, currency,
       // and monthly budget are shown immediately — even when re-logging in on
@@ -269,6 +318,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
             email: user.email,
             currency: user.currency,
             monthlyBudget: user.monthlyBudget,
+            hasPinOnServer: user.hasPin,
           );
 
       state = state.copyWith(isLoading: false, isConnected: true, user: user);
@@ -308,6 +358,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
       // Response structure: { data: { user: { ... }, accessToken: "..." } }
       final userData = res.data['data']['user'] as Map<String, dynamic>;
       final user = CloudUser.fromJson(userData);
+      await _cacheUser(user);
 
       // Mark email verified — router will redirect to profile-setup
       await _ref.read(authStateProvider.notifier).markEmailVerified();
@@ -368,8 +419,12 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
                 currency: currency,
                 emailVerified: state.user!.emailVerified,
                 monthlyBudget: monthlyBudget,
+                hasPin: state.user!.hasPin,
               ),
       );
+      if (state.user != null) {
+        await _cacheUser(state.user!);
+      }
       return true;
     } on DioException catch (e) {
       state = state.copyWith(error: _extractError(e));
@@ -393,8 +448,10 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
             currency: currency,
             emailVerified: state.user!.emailVerified,
             monthlyBudget: state.user!.monthlyBudget,
+            hasPin: state.user!.hasPin,
           ),
         );
+        await _cacheUser(state.user!);
       }
       return true;
     } on DioException {
@@ -444,6 +501,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
     } catch (_) {}
     await _storage.delete(key: TokenKeys.accessToken);
     await _storage.delete(key: TokenKeys.refreshToken);
+    await _clearCachedUser();
     state = const CloudAuthState();
   }
 
@@ -451,6 +509,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
   Future<bool> deleteAccount() async {
     state = state.copyWith(isLoading: true);
     try {
+      await NotificationService.unregisterFcmToken(_dio);
       await _dio.delete(ApiEndpoints.userProfile);
     } on DioException catch (e) {
       // If 401/403 the token may already be invalid — proceed with local cleanup
@@ -461,6 +520,7 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
     }
     await _storage.delete(key: TokenKeys.accessToken);
     await _storage.delete(key: TokenKeys.refreshToken);
+    await _clearCachedUser();
     state = const CloudAuthState();
     return true;
   }
@@ -487,6 +547,29 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
   }
 
   // ── Helpers ───────────────────────────────────────────────────────────────
+  Future<CloudUser?> _readCachedUser() async {
+    final raw = HiveService.user.get(AppConstants.cloudUserKey);
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      return CloudUser.fromJson(
+        json.decode(raw) as Map<String, dynamic>,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _cacheUser(CloudUser user) async {
+    await HiveService.user.put(
+      AppConstants.cloudUserKey,
+      json.encode(user.toJson()),
+    );
+  }
+
+  Future<void> _clearCachedUser() async {
+    await HiveService.user.delete(AppConstants.cloudUserKey);
+  }
+
   Future<void> _saveTokens(dynamic data) async {
     final access = data['accessToken'] as String?;
     final refresh = data['refreshToken'] as String?;

@@ -47,4 +47,19 @@ abstract class Validators {
     if (value.trim().length > 50) return 'Name cannot exceed 50 characters';
     return null;
   }
+
+  static String? passwordStrong(String? value) {
+    if (value == null || value.isEmpty) return 'Password is required';
+    if (value.length < 8) return 'Password must be at least 8 characters';
+    if (!RegExp(r'[a-z]').hasMatch(value)) {
+      return 'Include at least one lowercase letter';
+    }
+    if (!RegExp(r'[A-Z]').hasMatch(value)) {
+      return 'Include at least one uppercase letter';
+    }
+    if (!RegExp(r'\d').hasMatch(value)) {
+      return 'Include at least one number';
+    }
+    return null;
+  }
 }

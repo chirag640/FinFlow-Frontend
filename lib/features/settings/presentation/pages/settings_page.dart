@@ -7,13 +7,21 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/app_radius.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/services/biometric_service.dart';
 import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../ai_insights/presentation/providers/ai_insights_provider.dart';
 import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../auth/presentation/providers/cloud_auth_provider.dart';
+import '../../../budgets/presentation/providers/budget_provider.dart';
+import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../../../goals/presentation/providers/goals_provider.dart';
+import '../../../groups/presentation/providers/group_provider.dart';
+import '../../../groups/presentation/providers/upi_id_provider.dart';
 import '../../../sync/presentation/providers/sync_provider.dart';
 
 class SettingsPage extends ConsumerStatefulWidget {
@@ -67,14 +75,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         title: Text('Settings',
             style: TextStyle(
                 fontWeight: FontWeight.w800, color: colors.onSurface)),
-        actions: [
-          IconButton(
-            tooltip: 'Search settings',
-            icon: const Icon(Icons.search_rounded),
-            onPressed: () =>
-                _showSettingsSearch(context, ref, cloud, syncState),
-          ),
-        ],
+        // actions: [
+        //   IconButton(
+        //     tooltip: 'Search settings',
+        //     icon: const Icon(Icons.search_rounded),
+        //     onPressed: () =>
+        //         _showSettingsSearch(context, ref, cloud, syncState),
+        //   ),
+        // ],
       ),
       body: SafeArea(
         child: ListView(
@@ -176,8 +184,8 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   _SettingsTile(
                     icon: Icons.logout_rounded,
                     iconColor: AppColors.error,
-                    title: 'Disconnect',
-                    subtitle: 'Data stays on device',
+                    title: 'Sign out',
+                    subtitle: 'Clears local data on this device',
                     onTap: () => _confirmDisconnect(context, ref),
                   ),
                   Divider(height: 1, indent: R.s(56)),
@@ -250,63 +258,63 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       _showCurrencyPicker(context, ref, settings.currency),
                 ),
                 Divider(height: 1, indent: R.s(56)),
-                _SettingsTile(
-                  icon: Icons.view_compact_alt_outlined,
-                  iconColor: AppColors.primary,
-                  title: 'Density Mode',
-                  subtitle: _densityLabel(settings.densityMode),
-                  onTap: () =>
-                      _showDensityPicker(context, ref, settings.densityMode),
-                ),
-                Divider(height: 1, indent: R.s(56)),
-                _SettingsTile(
-                  icon: Icons.lightbulb_outline_rounded,
-                  iconColor: AppColors.warning,
-                  title: 'Onboarding Tips',
-                  subtitle: 'Show contextual guidance in key flows',
-                  trailing: Switch.adaptive(
-                    value: settings.onboardingTipsEnabled,
-                    activeThumbColor: AppColors.primary,
-                    onChanged: (v) => ref
-                        .read(settingsProvider.notifier)
-                        .setOnboardingTipsEnabled(v),
-                  ),
-                ),
+                // _SettingsTile(
+                //   icon: Icons.view_compact_alt_outlined,
+                //   iconColor: AppColors.primary,
+                //   title: 'Density Mode',
+                //   subtitle: _densityLabel(settings.densityMode),
+                //   onTap: () =>
+                //       _showDensityPicker(context, ref, settings.densityMode),
+                // ),
+                // Divider(height: 1, indent: R.s(56)),
+                // _SettingsTile(
+                //   icon: Icons.lightbulb_outline_rounded,
+                //   iconColor: AppColors.warning,
+                //   title: 'Onboarding Tips',
+                //   subtitle: 'Show contextual guidance in key flows',
+                //   trailing: Switch.adaptive(
+                //     value: settings.onboardingTipsEnabled,
+                //     activeThumbColor: AppColors.primary,
+                //     onChanged: (v) => ref
+                //         .read(settingsProvider.notifier)
+                //         .setOnboardingTipsEnabled(v),
+                //   ),
+                // ),
               ]),
             ).animate().fadeIn(delay: 210.ms),
-            const Gap(10),
-            _CompactSection(
-              title: 'Notifications',
-              child: _SettingsCard(children: [
-                _SettingsTile(
-                  icon: Icons.notifications_active_rounded,
-                  iconColor: AppColors.warning,
-                  title: 'Budget Alerts',
-                  subtitle: 'Notify when a budget envelope hits 80% or over',
-                  trailing: Switch.adaptive(
-                    value: settings.notifBudgetAlerts,
-                    activeThumbColor: AppColors.primary,
-                    onChanged: (v) => ref
-                        .read(settingsProvider.notifier)
-                        .setNotifBudgetAlerts(v),
-                  ),
-                ),
-                Divider(height: 1, indent: R.s(56)),
-                _SettingsTile(
-                  icon: Icons.savings_rounded,
-                  iconColor: AppColors.success,
-                  title: 'Goal Milestones',
-                  subtitle: 'Notify at 50% and 100% of each savings goal',
-                  trailing: Switch.adaptive(
-                    value: settings.notifGoalAlerts,
-                    activeThumbColor: AppColors.primary,
-                    onChanged: (v) => ref
-                        .read(settingsProvider.notifier)
-                        .setNotifGoalAlerts(v),
-                  ),
-                ),
-              ]),
-            ).animate().fadeIn(delay: 240.ms),
+            // const Gap(10),
+            // _CompactSection(
+            //   title: 'Notifications',
+            //   child: _SettingsCard(children: [
+            //     _SettingsTile(
+            //       icon: Icons.notifications_active_rounded,
+            //       iconColor: AppColors.warning,
+            //       title: 'Budget Alerts',
+            //       subtitle: 'Notify when a budget envelope hits 80% or over',
+            //       trailing: Switch.adaptive(
+            //         value: settings.notifBudgetAlerts,
+            //         activeThumbColor: AppColors.primary,
+            //         onChanged: (v) => ref
+            //             .read(settingsProvider.notifier)
+            //             .setNotifBudgetAlerts(v),
+            //       ),
+            //     ),
+            //     Divider(height: 1, indent: R.s(56)),
+            //     _SettingsTile(
+            //       icon: Icons.savings_rounded,
+            //       iconColor: AppColors.success,
+            //       title: 'Goal Milestones',
+            //       subtitle: 'Notify at 50% and 100% of each savings goal',
+            //       trailing: Switch.adaptive(
+            //         value: settings.notifGoalAlerts,
+            //         activeThumbColor: AppColors.primary,
+            //         onChanged: (v) => ref
+            //             .read(settingsProvider.notifier)
+            //             .setNotifGoalAlerts(v),
+            //       ),
+            //     ),
+            //   ]),
+            // ).animate().fadeIn(delay: 240.ms),
             const Gap(10),
             _CompactSection(
               title: 'Data & About',
@@ -319,17 +327,17 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   onTap: () => context.push(AppRoutes.export),
                 ),
                 Divider(height: 1, indent: R.s(56)),
-                _SettingsTile(
-                  icon: Icons.corporate_fare_outlined,
-                  iconColor: AppColors.primary,
-                  title: 'Organization Branding',
-                  subtitle: settings.organizationName.isEmpty
-                      ? 'Configure logo text, footer, and signatory'
-                      : settings.organizationName,
-                  onTap: () =>
-                      _showOrganizationBrandingDialog(context, ref, settings),
-                ),
-                Divider(height: 1, indent: R.s(56)),
+                // _SettingsTile(
+                //   icon: Icons.corporate_fare_outlined,
+                //   iconColor: AppColors.primary,
+                //   title: 'Organization Branding',
+                //   subtitle: settings.organizationName.isEmpty
+                //       ? 'Configure logo text, footer, and signatory'
+                //       : settings.organizationName,
+                //   onTap: () =>
+                //       _showOrganizationBrandingDialog(context, ref, settings),
+                // ),
+                // Divider(height: 1, indent: R.s(56)),
                 const _SettingsTile(
                   icon: Icons.info_outline_rounded,
                   iconColor: AppColors.textSecondary,
@@ -467,6 +475,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  // ignore: unused_element
   Future<void> _showSettingsSearch(
     BuildContext context,
     WidgetRef ref,
@@ -610,37 +619,57 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     final orgCtrl = TextEditingController(text: settings.organizationName);
     final footerCtrl = TextEditingController(text: settings.organizationFooter);
     final signCtrl = TextEditingController(text: settings.executiveSignatory);
+    final colorScheme = Theme.of(context).colorScheme;
 
     await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Organization Branding'),
+      builder: (ctx) => DSDialog(
+        title: const Text('Organization Branding',
+            style: TextStyle(fontWeight: FontWeight.w700)),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               TextField(
                 controller: orgCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Organization Name',
                   hintText: 'e.g. FinFlow Labs Pvt Ltd',
+                  filled: true,
+                  fillColor: colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: AppRadius.mdAll,
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-              const Gap(10),
+              const Gap(12),
               TextField(
                 controller: footerCtrl,
                 maxLines: 2,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Footer Note',
                   hintText: 'Confidential • Internal use only',
+                  filled: true,
+                  fillColor: colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: AppRadius.mdAll,
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
-              const Gap(10),
+              const Gap(12),
               TextField(
                 controller: signCtrl,
-                decoration: const InputDecoration(
+                decoration: InputDecoration(
                   labelText: 'Executive Signatory',
                   hintText: 'CFO / Finance Head',
+                  filled: true,
+                  fillColor: colorScheme.surfaceContainerHighest,
+                  border: OutlineInputBorder(
+                    borderRadius: AppRadius.mdAll,
+                    borderSide: BorderSide.none,
+                  ),
                 ),
               ),
             ],
@@ -651,7 +680,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             onPressed: () => Navigator.pop(ctx),
             child: const Text('Cancel'),
           ),
-          TextButton(
+          FilledButton(
             onPressed: () async {
               await ref.read(settingsProvider.notifier).setOrganizationProfile(
                     organizationName: orgCtrl.text.trim(),
@@ -751,7 +780,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context: context,
       barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setState) => AlertDialog(
+        builder: (ctx, setState) => DSDialog(
           title: const Text('Edit Profile',
               style: TextStyle(fontWeight: FontWeight.w700)),
           content: Form(
@@ -871,29 +900,34 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     );
   }
 
+  void _resetLocalState(WidgetRef ref) {
+    ref.invalidate(expenseProvider);
+    ref.invalidate(budgetProvider);
+    ref.invalidate(groupProvider);
+    ref.invalidate(groupExpenseProvider);
+    ref.invalidate(goalsProvider);
+    ref.invalidate(upiIdProvider);
+    ref.invalidate(aiInsightsProvider);
+    ref.invalidate(syncProvider);
+    ref.invalidate(settingsProvider);
+  }
+
   Future<void> _confirmDeleteAccount(
       BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await DSConfirmDialog.show(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Delete cloud account?'),
-        content: const Text(
-            'This permanently deletes your FinFlow cloud account and all synced data. Your local device data will remain.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, true),
-              child: const Text('Delete',
-                  style: TextStyle(color: AppColors.error))),
-        ],
-      ),
+      title: 'Delete cloud account?',
+      message:
+          'This permanently deletes your FinFlow cloud account and all synced data. Your local device data will remain.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
     if (confirmed == true) {
       final ok = await ref.read(cloudAuthProvider.notifier).deleteAccount();
       if (ok) {
         await ref.read(authStateProvider.notifier).logout();
+        _resetLocalState(ref);
         if (context.mounted) {
           context.go(AppRoutes.authLanding);
         }
@@ -911,7 +945,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       context: context,
       barrierDismissible: false,
       builder: (dialogCtx) => StatefulBuilder(
-        builder: (dialogCtx, setDialogState) => AlertDialog(
+        builder: (dialogCtx, setDialogState) => DSDialog(
           title: const Text('Confirm current PIN'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
@@ -1022,8 +1056,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         confirmed = true;
                         if (dialogCtx.mounted) Navigator.pop(dialogCtx);
                       } else {
+                        final authError = ref.read(authStateProvider).error;
                         setDialogState(() {
-                          pinError = 'Incorrect PIN. Try again.';
+                          pinError = authError ?? 'Incorrect PIN. Try again.';
                           enteredPin = '';
                         });
                       }
@@ -1044,26 +1079,18 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   }
 
   Future<void> _confirmDisconnect(BuildContext context, WidgetRef ref) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await DSConfirmDialog.show(
       context: context,
-      builder: (dialogCtx) => AlertDialog(
-        title: const Text('Disconnect cloud account?'),
-        content: const Text(
-            'Your local data will remain. Cloud backup and sync will be disabled.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, false),
-              child: const Text('Cancel')),
-          TextButton(
-              onPressed: () => Navigator.pop(dialogCtx, true),
-              child: const Text('Disconnect',
-                  style: TextStyle(color: AppColors.error))),
-        ],
-      ),
+      title: 'Sign out of cloud?',
+      message: 'This will sign you out and clear local data on this device.',
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Sign out',
+      isDestructive: true,
     );
     if (confirmed == true) {
       await ref.read(cloudAuthProvider.notifier).logout();
       await ref.read(authStateProvider.notifier).logout();
+      _resetLocalState(ref);
       if (context.mounted) {
         context.go(AppRoutes.authLanding);
       }
@@ -1127,25 +1154,14 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
   }
 
   Future<void> _revoke(String sessionId) async {
-    final confirmed = await showDialog<bool>(
+    final confirmed = await DSConfirmDialog.show(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Revoke this session?'),
-        content: const Text(
+      title: 'Revoke this session?',
+      message:
           'This device will be signed out from cloud sync until it logs in again.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, true),
-            child:
-                const Text('Revoke', style: TextStyle(color: AppColors.error)),
-          ),
-        ],
-      ),
+      cancelLabel: 'Cancel',
+      confirmLabel: 'Revoke',
+      isDestructive: true,
     );
     if (confirmed != true || !mounted) return;
 
@@ -1176,8 +1192,26 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
 
   String _displayDeviceName(CloudSession session) {
     final raw = session.deviceName?.trim();
+    final genericLabels = <String>{
+      'flutter android app',
+      'flutter ios app',
+      'flutter windows app',
+      'flutter macos app',
+      'flutter linux app',
+      'flutter app on android',
+      'flutter app on ios',
+      'flutter app on windows',
+      'flutter app on macos',
+      'flutter app on linux',
+      'flutter app',
+      'unknown device',
+    };
+
+    final normalizedRaw = raw?.toLowerCase();
     if (raw != null &&
         raw.isNotEmpty &&
+        normalizedRaw != null &&
+        !genericLabels.contains(normalizedRaw) &&
         !raw.toLowerCase().contains('unknown browser') &&
         !raw.toLowerCase().contains('unknown os')) {
       return raw;
@@ -1187,16 +1221,16 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
     if (ua.isEmpty) return 'Unknown device';
 
     if (ua.contains('dart/') || ua.contains('flutter')) {
-      if (ua.contains('android')) return 'Flutter App on Android';
+      if (ua.contains('android')) return 'Android Device';
       if (ua.contains('iphone') || ua.contains('ipad') || ua.contains('ios')) {
-        return 'Flutter App on iOS';
+        return 'iOS Device';
       }
-      if (ua.contains('windows')) return 'Flutter App on Windows';
+      if (ua.contains('windows')) return 'Windows Device';
       if (ua.contains('mac os') || ua.contains('macintosh')) {
-        return 'Flutter App on macOS';
+        return 'macOS Device';
       }
-      if (ua.contains('linux')) return 'Flutter App on Linux';
-      return 'Flutter App';
+      if (ua.contains('linux')) return 'Linux Device';
+      return 'Unknown Device';
     }
 
     final os = ua.contains('android')
@@ -1230,7 +1264,7 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return AlertDialog(
+    return DSDialog(
       title: const Text('Active Sessions'),
       content: SizedBox(
         width: 520,
@@ -1291,9 +1325,7 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
                           final s = _sessions[i];
                           final revoking = _revokingSessionId == s.id;
                           final subtitle = [
-                            s.ipAddress?.trim().isNotEmpty == true
-                                ? s.ipAddress!
-                                : 'IP unavailable',
+                            'Signed in ${_relative(s.createdAt)}',
                             'Last used ${_relative(s.lastUsedAt)}',
                             'Expires ${_relative(s.expiresAt)}',
                           ].join(' • ');
@@ -1645,25 +1677,115 @@ class _BiometricTile extends StatefulWidget {
 
 class _BiometricTileState extends State<_BiometricTile> {
   bool _available = false;
+  bool _checkingAvailability = true;
+  bool _updating = false;
 
   @override
   void initState() {
     super.initState();
-    BiometricService.isAvailable().then((v) {
-      if (mounted) setState(() => _available = v);
+    _loadAvailability();
+  }
+
+  Future<void> _loadAvailability() async {
+    final available = await BiometricService.isAvailable();
+    if (!mounted) return;
+
+    setState(() {
+      _available = available;
+      _checkingAvailability = false;
     });
+
+    if (!available && widget.settings.biometricEnabled) {
+      await widget.ref
+          .read(settingsProvider.notifier)
+          .setBiometricEnabled(false);
+    }
+  }
+
+  Future<void> _handleToggle(bool enabled) async {
+    if (_updating) return;
+    setState(() => _updating = true);
+
+    try {
+      if (enabled) {
+        final available = await BiometricService.isAvailable();
+        if (!available) {
+          if (!mounted) return;
+          setState(() => _available = false);
+          await widget.ref
+              .read(settingsProvider.notifier)
+              .setBiometricEnabled(false);
+          if (!mounted) return;
+          showInfoSnackBar(
+            context,
+            'No biometrics are enrolled on this device. Set up biometrics in device settings first.',
+          );
+          return;
+        }
+
+        final result = await BiometricService.authenticateWithResult(
+          localizedReason: 'Confirm biometrics to enable unlock in FinFlow',
+        );
+        if (!mounted) return;
+
+        if (result.isSuccess) {
+          await widget.ref
+              .read(settingsProvider.notifier)
+              .setBiometricEnabled(true);
+          if (!mounted) return;
+          showSuccessSnackBar(context, 'Biometric unlock enabled.');
+          return;
+        }
+
+        if (result.shouldDisableBiometricCta) {
+          setState(() => _available = false);
+          await widget.ref
+              .read(settingsProvider.notifier)
+              .setBiometricEnabled(false);
+        }
+
+        if (!result.isCanceled && result.userMessage != null) {
+          if (!mounted) return;
+          showErrorSnackBar(context, result.userMessage!);
+        }
+        return;
+      }
+
+      await widget.ref
+          .read(settingsProvider.notifier)
+          .setBiometricEnabled(false);
+      if (!mounted) return;
+      showInfoSnackBar(context, 'Biometric unlock disabled.');
+    } finally {
+      if (mounted) {
+        setState(() => _updating = false);
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     R.init(context);
     final colors = Theme.of(context).colorScheme;
+    if (_checkingAvailability) {
+      return _SettingsTile(
+        icon: Icons.fingerprint_rounded,
+        iconColor: colors.onSurfaceVariant,
+        title: 'Biometric Unlock',
+        subtitle: 'Checking device support...',
+        trailing: SizedBox.square(
+          dimension: R.s(18),
+          child: const CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
     if (!_available) {
       return _SettingsTile(
         icon: Icons.fingerprint_rounded,
         iconColor: colors.onSurfaceVariant,
         title: 'Biometric Unlock',
-        subtitle: 'Not available on this device',
+        subtitle: 'No enrolled biometrics found on this device',
       );
     }
 
@@ -1689,20 +1811,16 @@ class _BiometricTileState extends State<_BiometricTile> {
             : 'Use fingerprint or Face ID to unlock',
         style: TextStyle(fontSize: R.t(12), color: colors.onSurfaceVariant),
       ),
-      trailing: Switch.adaptive(
-        value: widget.settings.biometricEnabled,
-        onChanged: (val) async {
-          if (val) {
-            // Require a biometric confirmation before enabling
-            final ok = await BiometricService.authenticate();
-            if (!ok) return;
-          }
-          await widget.ref
-              .read(settingsProvider.notifier)
-              .setBiometricEnabled(val);
-        },
-        activeThumbColor: AppColors.primary,
-      ),
+      trailing: _updating
+          ? SizedBox.square(
+              dimension: R.s(18),
+              child: const CircularProgressIndicator(strokeWidth: 2),
+            )
+          : Switch.adaptive(
+              value: widget.settings.biometricEnabled,
+              onChanged: _handleToggle,
+              activeThumbColor: AppColors.primary,
+            ),
       contentPadding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.xs),
     );
   }

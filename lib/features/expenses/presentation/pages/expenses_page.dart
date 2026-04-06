@@ -5,10 +5,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
-import '../../../../core/design/components/ds_empty_state.dart';
-import '../../../../core/design/components/ds_skeleton.dart';
+import '../../../../core/design/components/ds_async_state.dart';
 import '../../../../core/router/app_router.dart';
-import '../../../../core/ui/error_feedback.dart';
+import '../../../../core/theme/radius.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/responsive.dart';
@@ -68,14 +67,63 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
 
   @override
   Widget build(BuildContext context) {
-    listenForProviderError<ExpenseState>(
-      ref: ref,
-      context: context,
-      provider: expenseProvider,
-      errorSelector: (s) => s.error,
-    );
     final colors = Theme.of(context).colorScheme;
     final state = ref.watch(expenseProvider);
+    final monthLabel = DateFormat('MMMM')
+        .format(DateTime(state.selectedYear, state.selectedMonth));
+
+    Widget buildBody() {
+      if (state.isLoading) {
+        return const DSAsyncState.loading(
+          title: 'Loading expenses',
+          message: 'Fetching your latest entries...',
+        );
+      }
+
+      if (state.filteredExpenses.isEmpty) {
+        if (state.error != null && state.error!.trim().isNotEmpty) {
+          return DSAsyncState.error(
+            title: 'Unable to load expenses',
+            message: state.error,
+            onRetry: () => ref.read(expenseProvider.notifier).refresh(),
+          );
+        }
+
+        if (_searchActive || state.searchQuery.trim().isNotEmpty) {
+          return const DSAsyncState.empty(
+            emoji: '🔍',
+            title: 'No expenses found',
+            message: 'Try a different keyword',
+          );
+        }
+
+        return DSAsyncState.empty(
+          emoji: '💸',
+          title: 'No expenses yet',
+          message:
+              'Tap the + button to log your first expense for $monthLabel.',
+          actionLabel: 'Add Expense',
+          onAction: () => context.push(AppRoutes.addExpense),
+        );
+      }
+
+      return Column(
+        children: [
+          if (state.error != null && state.error!.trim().isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+              child: DSAsyncState.error(
+                compact: true,
+                title: 'Sync warning',
+                message: state.error,
+                onRetry: () => ref.read(expenseProvider.notifier).refresh(),
+              ),
+            ),
+          Expanded(
+              child: _ExpenseGroupedList(expenses: state.filteredExpenses)),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -121,69 +169,85 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                   ),
             actions: [
               if (!_searchActive) ...[
-                IconButton(
-                  icon: const Icon(Icons.bar_chart_rounded,
-                      color: AppColors.primary),
-                  onPressed: () => context.push(AppRoutes.analytics),
-                  tooltip: 'View Analytics',
+                Semantics(
+                  label: 'Open expense analytics',
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.bar_chart_rounded,
+                        color: AppColors.primary),
+                    onPressed: () => context.push(AppRoutes.analytics),
+                    tooltip: 'View Analytics',
+                  ),
                 ),
                 // Filter icon with active-count badge
-                Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    IconButton(
-                      icon: Icon(
-                        state.activeFilters.isEmpty
-                            ? Icons.tune_rounded
-                            : Icons.tune_rounded,
-                        color: state.activeFilters.isEmpty
-                            ? colors.onSurfaceVariant
-                            : AppColors.primary,
+                Semantics(
+                  label: state.activeFilters.isEmpty
+                      ? 'Filter expenses'
+                      : '${state.activeFilters.activeCount} filters active, tap to change filters',
+                  button: true,
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      IconButton(
+                        icon: Icon(
+                          state.activeFilters.isEmpty
+                              ? Icons.tune_rounded
+                              : Icons.tune_rounded,
+                          color: state.activeFilters.isEmpty
+                              ? colors.onSurfaceVariant
+                              : AppColors.primary,
+                        ),
+                        onPressed: () => _showFilterSheet(context, ref, state),
+                        tooltip: 'Filter',
                       ),
-                      onPressed: () => _showFilterSheet(context, ref, state),
-                      tooltip: 'Filter',
-                    ),
-                    if (state.activeFilters.activeCount > 0)
-                      Positioned(
-                        right: 6,
-                        top: 6,
-                        child: Container(
-                          width: R.s(16),
-                          height: R.s(16),
-                          decoration: const BoxDecoration(
-                            color: AppColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                          child: Center(
-                            child: Text(
-                              '${state.activeFilters.activeCount}',
-                              style: TextStyle(
-                                fontSize: R.t(10),
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white,
+                      if (state.activeFilters.activeCount > 0)
+                        Positioned(
+                          right: 6,
+                          top: 6,
+                          child: ExcludeSemantics(
+                            child: Container(
+                              width: R.s(16),
+                              height: R.s(16),
+                              decoration: const BoxDecoration(
+                                color: AppColors.primary,
+                                shape: BoxShape.circle,
+                              ),
+                              child: Center(
+                                child: Text(
+                                  '${state.activeFilters.activeCount}',
+                                  style: TextStyle(
+                                    fontSize: R.t(10),
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
                               ),
                             ),
                           ),
                         ),
-                      ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
-              IconButton(
-                icon: AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: _searchActive
-                      ? Icon(
-                          Icons.close_rounded,
-                          key: const ValueKey('close'),
-                          color: colors.onSurface,
-                        )
-                      : Icon(Icons.search_rounded,
-                          key: const ValueKey('search'),
-                          color: colors.onSurfaceVariant),
+              Semantics(
+                label: _searchActive ? 'Close search' : 'Search expenses',
+                button: true,
+                child: IconButton(
+                  icon: AnimatedSwitcher(
+                    duration: const Duration(milliseconds: 200),
+                    child: _searchActive
+                        ? Icon(
+                            Icons.close_rounded,
+                            key: const ValueKey('close'),
+                            color: colors.onSurface,
+                          )
+                        : Icon(Icons.search_rounded,
+                            key: const ValueKey('search'),
+                            color: colors.onSurfaceVariant),
+                  ),
+                  onPressed: _toggleSearch,
+                  tooltip: _searchActive ? 'Close search' : 'Search',
                 ),
-                onPressed: _toggleSearch,
-                tooltip: _searchActive ? 'Close search' : 'Search',
               ),
             ],
             bottom: _searchActive
@@ -199,23 +263,7 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                   ),
           ),
         ],
-        body: state.isLoading
-            ? const Padding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                child: DSSkeletonList(count: 7),
-              )
-            : state.filteredExpenses.isEmpty
-                ? _searchActive
-                    ? const _NoResultsView()
-                    : DSEmptyState(
-                        emoji: '💸',
-                        title: 'No expenses yet',
-                        subtitle:
-                            'Tap the + button to log your first expense for ${DateFormat('MMMM').format(DateTime(state.selectedYear, state.selectedMonth))}.',
-                        actionLabel: 'Add Expense',
-                        onAction: () => context.push(AppRoutes.addExpense),
-                      )
-                : _ExpenseGroupedList(expenses: state.filteredExpenses),
+        body: buildBody(),
       ),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => context.push(AppRoutes.addExpense),
@@ -224,37 +272,6 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
           'Add Expense',
           style: TextStyle(fontWeight: FontWeight.w600),
         ),
-      ),
-    );
-  }
-}
-
-// ── No Results View ───────────────────────────────────────────────────────────
-class _NoResultsView extends StatelessWidget {
-  const _NoResultsView();
-
-  @override
-  Widget build(BuildContext context) {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Text('🔍', style: TextStyle(fontSize: 48)),
-          SizedBox(height: 16),
-          Text(
-            'No expenses found',
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w600,
-              color: AppColors.textSecondary,
-            ),
-          ),
-          SizedBox(height: 6),
-          Text(
-            'Try a different keyword',
-            style: TextStyle(fontSize: 13, color: AppColors.textTertiary),
-          ),
-        ],
       ),
     );
   }
@@ -321,7 +338,7 @@ class _NavButton extends StatelessWidget {
         height: R.s(36),
         decoration: BoxDecoration(
           color: colors.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(R.s(10)),
+          borderRadius: AppRadius.smPlus,
         ),
         child: Icon(
           icon,
@@ -347,7 +364,7 @@ class _MonthSummaryBar extends StatelessWidget {
       padding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.s(10)),
       decoration: BoxDecoration(
         color: colors.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(R.s(14)),
+        borderRadius: AppRadius.mdPlus,
       ),
       child: Row(
         children: [
@@ -602,7 +619,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                   height: R.s(4),
                   decoration: BoxDecoration(
                     color: AppColors.border,
-                    borderRadius: BorderRadius.circular(R.s(2)),
+                    borderRadius: AppRadius.xxs,
                   ),
                 ),
               ),
@@ -724,7 +741,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                               color: selected
                                   ? cat.color.withValues(alpha: 0.15)
                                   : colors.surfaceContainerHighest,
-                              borderRadius: BorderRadius.circular(20),
+                              borderRadius: AppRadius.card,
                               border: Border.all(
                                 color: selected
                                     ? cat.color
@@ -773,7 +790,7 @@ class _FilterSheetState extends State<_FilterSheet> {
                       style: FilledButton.styleFrom(
                         backgroundColor: AppColors.primary,
                         shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                          borderRadius: AppRadius.mdPlus,
                         ),
                       ),
                       child: Text(
@@ -824,7 +841,7 @@ class _TypeChip extends StatelessWidget {
           color: selected
               ? activeColor.withValues(alpha: 0.12)
               : colors.surfaceContainerHighest,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppRadius.card,
           border: Border.all(
             color: selected ? activeColor : colors.outlineVariant,
             width: selected ? 1.5 : 1,

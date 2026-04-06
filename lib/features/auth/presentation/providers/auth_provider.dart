@@ -1,4 +1,6 @@
-﻿import 'package:flutter_riverpod/flutter_riverpod.dart';
+﻿import 'dart:math';
+
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../data/repositories/auth_repository_impl.dart';
 import '../../domain/entities/app_user.dart';
@@ -70,6 +72,12 @@ class AuthState {
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthRepository _repo;
   final Ref _ref;
+  static const int _pinMaxAttempts = 5;
+  static const int _pinBaseLockSeconds = 30;
+  static const int _pinMaxLockSeconds = 600;
+
+  int _failedPinAttempts = 0;
+  DateTime? _pinLockedUntil;
 
   AuthNotifier(this._repo, this._ref) : super(const AuthState()) {
     _init();
@@ -77,11 +85,18 @@ class AuthNotifier extends StateNotifier<AuthState> {
 
   Future<void> _init() async {
     state = state.copyWith(isLoading: true);
-    final account = await _repo.hasAccount;
-    final verified = await _repo.isEmailVerified;
-    final profile = await _repo.hasProfile;
-    final pin = await _repo.hasPin;
-    final user = await _repo.getUser();
+    final values = await Future.wait<dynamic>([
+      _repo.hasAccount,
+      _repo.isEmailVerified,
+      _repo.hasProfile,
+      _repo.hasPin,
+      _repo.getUser(),
+    ]);
+    final account = values[0] as bool;
+    final verified = values[1] as bool;
+    final profile = values[2] as bool;
+    final pin = values[3] as bool;
+    final user = values[4] as AppUser?;
 
     state = AuthState(
       user: user,
@@ -122,18 +137,97 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // ref passed so savePin can push the hash to the server
       await _repo.savePin(pin, ref: _ref);
     }
+    _failedPinAttempts = 0;
+    _pinLockedUntil = null;
     state = state.copyWith(hasPin: true, isAuthenticated: true);
   }
 
   // ── Called at PIN entry / biometric unlock ─────────────────────────────────
   Future<bool> verifyPin(String pin) async {
-    final valid = await _repo.verifyPin(pin);
-    if (valid) {
-      state = state.copyWith(isAuthenticated: true);
-    } else {
-      state = state.copyWith(error: 'Incorrect PIN');
+    final now = DateTime.now();
+    if (_pinLockedUntil != null && now.isBefore(_pinLockedUntil!)) {
+      final waitSeconds = _pinLockedUntil!
+          .difference(now)
+          .inSeconds
+          .clamp(1, _pinMaxLockSeconds);
+      state = state.copyWith(
+        error: 'Too many PIN attempts. Try again in $waitSeconds seconds.',
+      );
+      return false;
     }
-    return valid;
+
+    final result = await _repo.verifyPin(pin, ref: _ref);
+
+    if (result.isValid) {
+      _failedPinAttempts = 0;
+      _pinLockedUntil = null;
+      state = state.copyWith(isAuthenticated: true, error: null);
+      return true;
+    }
+
+    if (result.outcome == PinVerificationOutcome.unavailable) {
+      state = state.copyWith(
+        error: result.message ??
+            'Unable to verify PIN right now. Please try again.',
+      );
+      return false;
+    }
+
+    if (result.outcome == PinVerificationOutcome.notConfigured) {
+      state = state.copyWith(
+        error: result.message ?? 'No PIN is configured for this account.',
+      );
+      return false;
+    }
+
+    if (result.outcome == PinVerificationOutcome.locked) {
+      final lockedUntil = result.lockedUntil;
+      _pinLockedUntil = lockedUntil;
+      final lockSeconds = lockedUntil == null
+          ? _pinBaseLockSeconds
+          : max(1, lockedUntil.difference(now).inSeconds);
+      state = state.copyWith(
+        error:
+            'Too many incorrect PIN attempts. Try again in $lockSeconds seconds.',
+      );
+      return false;
+    }
+
+    if (result.remainingAttempts != null) {
+      final attemptsLeft = result.remainingAttempts!.clamp(0, _pinMaxAttempts);
+      _failedPinAttempts = _pinMaxAttempts - attemptsLeft;
+      if (attemptsLeft <= 0 && result.lockedUntil != null) {
+        _pinLockedUntil = result.lockedUntil;
+      }
+
+      state = state.copyWith(
+        error: attemptsLeft > 0
+            ? 'Incorrect PIN. $attemptsLeft attempt${attemptsLeft == 1 ? '' : 's'} left before temporary lock.'
+            : 'Too many incorrect PIN attempts. Please wait before trying again.',
+      );
+      return false;
+    }
+
+    _failedPinAttempts += 1;
+    String message = 'Incorrect PIN';
+
+    if (_failedPinAttempts >= _pinMaxAttempts) {
+      final exponent = _failedPinAttempts - _pinMaxAttempts;
+      final lockSeconds = min(
+        _pinMaxLockSeconds,
+        (_pinBaseLockSeconds * pow(2, exponent)).toInt(),
+      );
+      _pinLockedUntil = now.add(Duration(seconds: lockSeconds));
+      message =
+          'Too many incorrect PIN attempts. Try again in $lockSeconds seconds.';
+    } else {
+      final attemptsLeft = _pinMaxAttempts - _failedPinAttempts;
+      message =
+          'Incorrect PIN. $attemptsLeft attempt${attemptsLeft == 1 ? '' : 's'} left before temporary lock.';
+    }
+
+    state = state.copyWith(error: message);
+    return false;
   }
 
   /// Called after a successful biometric prompt on lock screen.
@@ -145,6 +239,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   // ── Remove PIN ─────────────────────────────────────────────────────────────
   Future<void> removePin() async {
     await _repo.removePin(ref: _ref);
+    _failedPinAttempts = 0;
+    _pinLockedUntil = null;
     state = state.copyWith(hasPin: false, isAuthenticated: true);
   }
 
@@ -161,6 +257,7 @@ class AuthNotifier extends StateNotifier<AuthState> {
     required String email,
     String currency = 'INR',
     double? monthlyBudget,
+    bool? hasPinOnServer,
     String?
         pinHash, // SHA-256 hash received from server; null = no PIN on server
   }) async {
@@ -178,27 +275,38 @@ class AuthNotifier extends StateNotifier<AuthState> {
     await _repo.saveUser(appUser);
     await _repo.setHasProfile(true);
 
-    // If the server sent a PIN hash and we don't yet have one locally,
-    // store it so the user can unlock with the same PIN on this new device.
-    bool pin = await _repo.hasPin;
-    if (!pin && pinHash != null && pinHash.isNotEmpty) {
+    bool localPin = await _repo.hasPin;
+    if (!localPin && pinHash != null && pinHash.isNotEmpty) {
       await _repo.syncPinFromHash(pinHash);
-      pin = true;
+      localPin = true;
     }
+
+    // If server reports no PIN but a stale local PIN exists, clear local hash
+    // to avoid false verification mismatches.
+    if (hasPinOnServer == false && localPin) {
+      await _repo.removePin();
+      localPin = false;
+    }
+
+    final effectiveHasPin = hasPinOnServer ?? localPin;
+    final nextAuthenticated =
+        effectiveHasPin ? (localPin ? state.isAuthenticated : false) : true;
 
     state = state.copyWith(
       user: appUser,
       hasAccount: true,
       isEmailVerified: true,
       hasProfile: true,
-      hasPin: pin,
-      isAuthenticated: state.isAuthenticated || !pin,
+      hasPin: effectiveHasPin,
+      isAuthenticated: nextAuthenticated,
     );
   }
 
   // ── Full logout ───────────────────────────────────────────────────────────
   Future<void> logout() async {
     await _repo.clearAll();
+    _failedPinAttempts = 0;
+    _pinLockedUntil = null;
     state = const AuthState();
   }
 

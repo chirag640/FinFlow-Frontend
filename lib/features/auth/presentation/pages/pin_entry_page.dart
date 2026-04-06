@@ -22,15 +22,16 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
   String _pin = '';
   bool _isShaking = false;
   String? _error;
-  int _attempts = 0;
-  DateTime? _lockoutUntil;
   bool _biometricAvailable = false;
   bool _biometricInProgress = false;
 
   @override
   void initState() {
     super.initState();
-    _checkBiometric();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      _checkBiometric();
+    });
   }
 
   Future<void> _checkBiometric() async {
@@ -39,22 +40,38 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
     final available = await BiometricService.isAvailable();
     if (!mounted) return;
     setState(() => _biometricAvailable = available);
-    if (available) _tryBiometric();
+    if (available) {
+      await _tryBiometric(isAutoAttempt: true);
+    }
   }
 
-  Future<void> _tryBiometric() async {
+  Future<void> _tryBiometric({bool isAutoAttempt = false}) async {
     if (_biometricInProgress) return;
-    _biometricInProgress = true;
-    final success = await BiometricService.authenticate();
-    _biometricInProgress = false;
+    setState(() {
+      _biometricInProgress = true;
+      if (!isAutoAttempt) {
+        _error = null;
+      }
+    });
+
+    final result = await BiometricService.authenticateWithResult();
     if (!mounted) return;
-    if (success) {
+    setState(() => _biometricInProgress = false);
+
+    if (result.isSuccess) {
       ref.read(authStateProvider.notifier).unlockWithBiometric();
       context.go(AppRoutes.dashboard);
       return;
     }
+
+    if (result.shouldDisableBiometricCta) {
+      setState(() => _biometricAvailable = false);
+    }
+
+    if (result.isCanceled) return;
+
     setState(() {
-      _error = 'Biometric unlock failed. Please try PIN.';
+      _error = result.userMessage ?? 'Biometric unlock failed. Please try PIN.';
     });
   }
 
@@ -76,36 +93,17 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
   }
 
   Future<void> _verify() async {
-    // Enforce lockout before accepting any PIN attempt
-    if (_lockoutUntil != null && DateTime.now().isBefore(_lockoutUntil!)) {
-      final remaining = _lockoutUntil!.difference(DateTime.now()).inSeconds + 1;
-      setState(() {
-        _pin = '';
-        _error = 'Too many attempts. Wait ${remaining}s to try again.';
-      });
-      return;
-    }
-
     final valid = await ref.read(authStateProvider.notifier).verifyPin(_pin);
     if (!mounted) return;
 
     if (valid) {
       context.go(AppRoutes.dashboard);
     } else {
-      _attempts++;
-      String errorMsg;
-      if (_attempts >= 5) {
-        _lockoutUntil = DateTime.now().add(const Duration(seconds: 30));
-        _attempts = 0;
-        errorMsg = 'Too many attempts. Wait 30s to try again.';
-      } else {
-        final left = 5 - _attempts;
-        errorMsg = 'Incorrect PIN. $left attempt${left == 1 ? '' : 's'} left.';
-      }
+      final authError = ref.read(authStateProvider).error;
       setState(() {
         _pin = '';
         _isShaking = true;
-        _error = errorMsg;
+        _error = authError ?? 'Incorrect PIN. Please try again.';
       });
       Future.delayed(const Duration(seconds: 1), () {
         if (mounted) setState(() => _isShaking = false);
@@ -189,9 +187,17 @@ class _PinEntryPageState extends ConsumerState<PinEntryPage> {
             // Biometric button
             if (_biometricAvailable)
               TextButton.icon(
-                onPressed: _tryBiometric,
-                icon: Icon(Icons.fingerprint_rounded, size: R.s(22)),
-                label: const Text('Use biometrics'),
+                onPressed: _biometricInProgress ? null : () => _tryBiometric(),
+                icon: _biometricInProgress
+                    ? SizedBox(
+                        width: R.s(20),
+                        height: R.s(20),
+                        child: const CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : Icon(Icons.fingerprint_rounded, size: R.s(22)),
+                label: Text(
+                  _biometricInProgress ? 'Checking...' : 'Use biometrics',
+                ),
                 style: TextButton.styleFrom(
                   foregroundColor: AppColors.primary,
                   textStyle: TextStyle(

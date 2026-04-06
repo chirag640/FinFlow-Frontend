@@ -46,6 +46,7 @@ dependencies:
 
   # Connectivity & Biometrics
   connectivity_plus: ^6.0.5
+  device_info_plus: ^11.2.0
   local_auth: ^2.3.0
   url_launcher: ^6.3.0
 

@@ -5,6 +5,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
@@ -136,25 +137,17 @@ class GoalsPage extends ConsumerWidget {
   }
 
   void _confirmDelete(BuildContext context, WidgetRef ref, SavingsGoal goal) {
-    showDialog<bool>(
+    DSConfirmDialog.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete goal?'),
-        content: Text('"${goal.title}" will be permanently removed.'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () {
-              Navigator.pop(ctx);
-              ref.read(goalsProvider.notifier).deleteGoal(goal.id);
-            },
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
+      title: 'Delete goal?',
+      message: '"${goal.title}" will be permanently removed.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    ).then((confirmed) {
+      if (confirmed == true) {
+        ref.read(goalsProvider.notifier).deleteGoal(goal.id);
+      }
+    });
   }
 }
 
@@ -170,16 +163,19 @@ class _GoalsSummaryBar extends StatelessWidget {
         ? (state.totalSaved / state.totalTargeted).clamp(0.0, 1.0)
         : 0.0;
 
+    // Use theme-defined gradient colors for consistency
+    const gradientColors = [AppColors.primary, AppColors.primaryDark];
+
     return Container(
       margin: EdgeInsets.fromLTRB(R.md, R.md, R.md, 0),
-      padding: EdgeInsets.all(R.s(20)),
+      padding: EdgeInsets.all(R.lg),
       decoration: BoxDecoration(
         gradient: const LinearGradient(
-          colors: [Color(0xFF4F46E5), Color(0xFF3730A3)],
+          colors: gradientColors,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        borderRadius: BorderRadius.circular(R.s(20)),
+        borderRadius: BorderRadius.circular(R.xl),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,8 +188,9 @@ class _GoalsSummaryBar extends StatelessWidget {
                   children: [
                     Text('Total Saved',
                         style: TextStyle(
-                            fontSize: R.t(12), color: Colors.white60)),
-                    SizedBox(height: R.s(2)),
+                            fontSize: R.t(12),
+                            color: Colors.white.withValues(alpha: 0.7))),
+                    SizedBox(height: R.xs),
                     Text(
                       CurrencyFormatter.format(state.totalSaved),
                       style: TextStyle(
@@ -208,21 +205,22 @@ class _GoalsSummaryBar extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text('Target',
-                      style:
-                          TextStyle(fontSize: R.t(12), color: Colors.white60)),
-                  SizedBox(height: R.s(2)),
+                      style: TextStyle(
+                          fontSize: R.t(12),
+                          color: Colors.white.withValues(alpha: 0.7))),
+                  SizedBox(height: R.xs),
                   Text(
                     CurrencyFormatter.format(state.totalTargeted),
                     style: TextStyle(
                         fontSize: R.t(16),
                         fontWeight: FontWeight.w700,
-                        color: Colors.white70),
+                        color: Colors.white.withValues(alpha: 0.85)),
                   ),
                 ],
               ),
             ],
           ),
-          SizedBox(height: R.s(14)),
+          SizedBox(height: R.md),
           ClipRRect(
             borderRadius: BorderRadius.circular(R.sm),
             child: TweenAnimationBuilder<double>(
@@ -241,7 +239,9 @@ class _GoalsSummaryBar extends StatelessWidget {
           Text(
             '${(overallPct * 100).toStringAsFixed(0)}% of total goal · '
             '${state.active.length} active, ${state.completed.length} completed',
-            style: TextStyle(fontSize: R.t(11), color: Colors.white70),
+            style: TextStyle(
+                fontSize: R.t(11),
+                color: Colors.white.withValues(alpha: 0.85)),
           ),
         ],
       ),

@@ -7,7 +7,9 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/providers/settings_provider.dart';
+import '../../../../core/theme/radius.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../expenses/domain/entities/expense.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
@@ -51,31 +53,12 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   }
 
   Future<void> _saveCurrentAsPreset() async {
-    final nameCtrl = TextEditingController();
-    final name = await showDialog<String>(
+    final name = await DSInputDialog.show(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Save Export Preset'),
-        content: TextField(
-          controller: nameCtrl,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'e.g. Executive Monthly PDF',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.pop(context, nameCtrl.text.trim()),
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      title: 'Save Export Preset',
+      hintText: 'e.g. Executive Monthly PDF',
+      confirmLabel: 'Save',
     );
-    nameCtrl.dispose();
 
     if (name == null || name.isEmpty) return;
 
@@ -466,7 +449,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                   EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(10)),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(R.s(12)),
+                borderRadius: AppRadius.md,
                 border: Border.all(color: AppColors.border),
               ),
               child: Row(
@@ -503,7 +486,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
               padding: EdgeInsets.all(R.s(14)),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surface,
-                borderRadius: BorderRadius.circular(R.s(12)),
+                borderRadius: AppRadius.md,
                 border: Border.all(color: AppColors.border),
               ),
               child: Row(children: [
@@ -528,8 +511,7 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.primary,
                   foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(R.s(14))),
+                  shape: RoundedRectangleBorder(borderRadius: AppRadius.mdPlus),
                   elevation: 0,
                 ),
                 icon: _exporting
@@ -589,7 +571,7 @@ class _DateTile extends StatelessWidget {
           padding: EdgeInsets.all(R.s(14)),
           decoration: BoxDecoration(
             color: Theme.of(context).colorScheme.surface,
-            borderRadius: BorderRadius.circular(R.s(12)),
+            borderRadius: AppRadius.md,
             border: Border.all(color: AppColors.border),
           ),
           child:
@@ -634,7 +616,7 @@ class _FormatChip extends StatelessWidget {
         padding: EdgeInsets.symmetric(horizontal: R.s(14), vertical: R.s(12)),
         decoration: BoxDecoration(
           color: selected ? AppColors.primaryExtraLight : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(R.s(12)),
+          borderRadius: AppRadius.md,
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
             width: selected ? 2 : 1,
@@ -677,14 +659,14 @@ class _ChoicePill extends StatelessWidget {
   Widget build(BuildContext context) {
     R.init(context);
     return InkWell(
-      borderRadius: BorderRadius.circular(24),
+      borderRadius: AppRadius.xl,
       onTap: onTap,
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 180),
         padding: EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(8)),
         decoration: BoxDecoration(
           color: selected ? AppColors.primaryExtraLight : Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(24),
+          borderRadius: AppRadius.xl,
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
           ),
@@ -720,13 +702,13 @@ class _PresetChip extends StatelessWidget {
     R.init(context);
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
+      borderRadius: AppRadius.card,
       onLongPress: onDelete,
       child: Container(
         padding: EdgeInsets.symmetric(horizontal: R.s(10), vertical: R.s(8)),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.surface,
-          borderRadius: BorderRadius.circular(20),
+          borderRadius: AppRadius.card,
           border: Border.all(color: AppColors.border),
         ),
         child: Row(

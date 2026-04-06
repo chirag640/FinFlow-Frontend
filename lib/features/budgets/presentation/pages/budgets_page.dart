@@ -4,10 +4,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
-import '../../../../core/design/components/ds_empty_state.dart';
-import '../../../../core/design/components/ds_skeleton.dart';
+import '../../../../core/design/components/ds_async_state.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/router/app_router.dart';
-import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../shared/widgets/finflow_app_bar.dart';
@@ -22,12 +21,6 @@ class BudgetsPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
     final colors = Theme.of(context).colorScheme;
-    listenForProviderError<BudgetState>(
-      ref: ref,
-      context: context,
-      provider: budgetProvider,
-      errorSelector: (s) => s.error,
-    );
     final state = ref.watch(budgetProvider);
 
     // Determine how many prev-month envelopes can be copied this month
@@ -41,6 +34,138 @@ class BudgetsPage extends ConsumerWidget {
         prevBudgets.where((b) => !currentKeys.contains(b.categoryKey)).length;
 
     void doCopy() => ref.read(budgetProvider.notifier).copyFromPreviousMonth();
+    void retryCloudLoad() {
+      ref.read(budgetProvider.notifier).reloadFromCloud();
+    }
+
+    Widget buildBody() {
+      if (state.isLoading) {
+        return const DSAsyncState.loading(
+          title: 'Loading budgets',
+          message: 'Fetching your envelopes...',
+        );
+      }
+
+      if (state.envelopes.isEmpty) {
+        if (state.error != null && state.error!.trim().isNotEmpty) {
+          return DSAsyncState.error(
+            title: 'Unable to load budgets',
+            message: state.error,
+            onRetry: retryCloudLoad,
+          );
+        }
+
+        final emptyState = DSAsyncState.empty(
+          emoji: '🗂️',
+          title: 'No budgets set',
+          message:
+              'Create budget envelopes for each spending category to stay on track.',
+          actionLabel: 'Add Budget',
+          onAction: () => context.push(AppRoutes.addBudget),
+        );
+
+        if (copyableCount > 0) {
+          return Column(
+            children: [
+              Expanded(child: emptyState),
+              Padding(
+                padding: EdgeInsets.fromLTRB(R.s(20), 0, R.s(20), R.lg),
+                child: _CopyLastMonthBanner(
+                  prevMonth: prevMonth,
+                  prevYear: prevYear,
+                  onCopy: doCopy,
+                ).animate().fadeIn(delay: 200.ms),
+              ),
+            ],
+          );
+        }
+
+        return emptyState;
+      }
+
+      return CustomScrollView(
+        slivers: [
+          SliverPadding(
+            padding: EdgeInsets.all(R.s(20)),
+            sliver: SliverList(
+              delegate: SliverChildListDelegate([
+                if (state.error != null && state.error!.trim().isNotEmpty) ...[
+                  DSAsyncState.error(
+                    compact: true,
+                    title: 'Sync warning',
+                    message: state.error,
+                    onRetry: retryCloudLoad,
+                  ).animate().fadeIn(delay: 40.ms),
+                  SizedBox(height: R.md),
+                ],
+
+                // Copy-from-last-month quick action
+                if (copyableCount > 0) ...[
+                  _CopyLastMonthBanner(
+                    prevMonth: prevMonth,
+                    prevYear: prevYear,
+                    onCopy: doCopy,
+                  ).animate().fadeIn(delay: 50.ms),
+                  SizedBox(height: R.md),
+                ],
+                _BudgetSummaryBar(
+                  totalAllocated: state.totalAllocated,
+                  totalSpent: state.totalSpent,
+                ),
+                // At-risk alert banner
+                _BudgetAlertBanner(envelopes: state.envelopes),
+                // Budget vs Actual breakdown
+                if (state.envelopes.isNotEmpty)
+                  _BudgetVsActualSection(envelopes: state.envelopes)
+                      .animate(delay: 100.ms)
+                      .fadeIn(duration: 300.ms)
+                      .slideY(begin: 0.06, end: 0),
+                SizedBox(height: R.s(20)),
+                Text(
+                  'ENVELOPES',
+                  style: TextStyle(
+                    fontSize: R.t(11),
+                    fontWeight: FontWeight.w700,
+                    color: colors.onSurfaceVariant,
+                    letterSpacing: 1.2,
+                  ),
+                ),
+                SizedBox(height: R.s(12)),
+                ...state.envelopes.asMap().entries.map((entry) {
+                  final i = entry.key;
+                  final env = entry.value;
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: R.s(12)),
+                    child: BudgetEnvelopeCard(
+                      envelope: env,
+                      onDelete: () async {
+                        final confirm = await DSConfirmDialog.show(
+                          context: context,
+                          title: 'Delete budget?',
+                          message:
+                              'This will remove the budget for ${env.budget.categoryKey}.',
+                          confirmLabel: 'Delete',
+                          isDestructive: true,
+                        );
+                        if (confirm == true) {
+                          ref
+                              .read(budgetProvider.notifier)
+                              .deleteBudget(env.budget.id);
+                        }
+                      },
+                    )
+                        .animate(delay: Duration(milliseconds: 60 * i))
+                        .fadeIn(duration: 300.ms)
+                        .slideY(begin: 0.1, end: 0),
+                  );
+                }),
+                SizedBox(height: R.s(80)),
+              ]),
+            ),
+          ),
+        ],
+      );
+    }
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -66,124 +191,7 @@ class BudgetsPage extends ConsumerWidget {
         tooltip: 'Add Budget Envelope',
         child: const Icon(Icons.add_rounded),
       ),
-      body: state.isLoading
-          ? const DSSkeletonList(count: 4)
-          : state.envelopes.isEmpty
-              ? copyableCount > 0
-                  ? Column(
-                      children: [
-                        Expanded(
-                          child: DSEmptyState(
-                            emoji: '🗂️',
-                            title: 'No budgets set',
-                            subtitle:
-                                'Create budget envelopes for each spending category to stay on track.',
-                            actionLabel: 'Add Budget',
-                            onAction: () => context.push(AppRoutes.addBudget),
-                          ),
-                        ),
-                        Padding(
-                          padding:
-                              EdgeInsets.fromLTRB(R.s(20), 0, R.s(20), R.lg),
-                          child: _CopyLastMonthBanner(
-                            prevMonth: prevMonth,
-                            prevYear: prevYear,
-                            onCopy: doCopy,
-                          ).animate().fadeIn(delay: 200.ms),
-                        ),
-                      ],
-                    )
-                  : DSEmptyState(
-                      emoji: '🗂️',
-                      title: 'No budgets set',
-                      subtitle:
-                          'Create budget envelopes for each spending category to stay on track.',
-                      actionLabel: 'Add Budget',
-                      onAction: () => context.push(AppRoutes.addBudget),
-                    )
-              : CustomScrollView(
-                  slivers: [
-                    SliverPadding(
-                      padding: EdgeInsets.all(R.s(20)),
-                      sliver: SliverList(
-                        delegate: SliverChildListDelegate([
-                          // Copy-from-last-month quick action
-                          if (copyableCount > 0) ...[
-                            _CopyLastMonthBanner(
-                              prevMonth: prevMonth,
-                              prevYear: prevYear,
-                              onCopy: doCopy,
-                            ).animate().fadeIn(delay: 50.ms),
-                            SizedBox(height: R.md),
-                          ],
-                          _BudgetSummaryBar(
-                            totalAllocated: state.totalAllocated,
-                            totalSpent: state.totalSpent,
-                          ),
-                          // At-risk alert banner
-                          _BudgetAlertBanner(envelopes: state.envelopes),
-                          // Budget vs Actual breakdown
-                          if (state.envelopes.isNotEmpty)
-                            _BudgetVsActualSection(envelopes: state.envelopes)
-                                .animate(delay: 100.ms)
-                                .fadeIn(duration: 300.ms)
-                                .slideY(begin: 0.06, end: 0),
-                          SizedBox(height: R.s(20)),
-                          Text(
-                            'ENVELOPES',
-                            style: TextStyle(
-                              fontSize: R.t(11),
-                              fontWeight: FontWeight.w700,
-                              color: colors.onSurfaceVariant,
-                              letterSpacing: 1.2,
-                            ),
-                          ),
-                          SizedBox(height: R.s(12)),
-                          ...state.envelopes.asMap().entries.map((entry) {
-                            final i = entry.key;
-                            final env = entry.value;
-                            return Padding(
-                              padding: EdgeInsets.only(bottom: R.s(12)),
-                              child: BudgetEnvelopeCard(
-                                envelope: env,
-                                onDelete: () async {
-                                  final confirm = await showDialog<bool>(
-                                    context: context,
-                                    builder: (d) => AlertDialog(
-                                      title: const Text('Delete budget?'),
-                                      actions: [
-                                        TextButton(
-                                          onPressed: () => d.pop(false),
-                                          child: const Text('Cancel'),
-                                        ),
-                                        TextButton(
-                                          onPressed: () => d.pop(true),
-                                          style: TextButton.styleFrom(
-                                              foregroundColor: AppColors.error),
-                                          child: const Text('Delete'),
-                                        ),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirm == true) {
-                                    ref
-                                        .read(budgetProvider.notifier)
-                                        .deleteBudget(env.budget.id);
-                                  }
-                                },
-                              )
-                                  .animate(
-                                      delay: Duration(milliseconds: 60 * i))
-                                  .fadeIn(duration: 300.ms)
-                                  .slideY(begin: 0.1, end: 0),
-                            );
-                          }),
-                          SizedBox(height: R.s(80)),
-                        ]),
-                      ),
-                    ),
-                  ],
-                ),
+      body: buildBody(),
     );
   }
 }

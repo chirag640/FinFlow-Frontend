@@ -1,14 +1,16 @@
 ﻿import 'dart:convert';
 import 'dart:math';
-import 'package:crypto/crypto.dart';
-import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import 'package:crypto/crypto.dart';
+import 'package:dio/dio.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import '../../domain/entities/app_user.dart';
+
 import '../../../../core/constants/app_constants.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/storage/hive_service.dart';
+import '../../domain/entities/app_user.dart';
 
 /// Generates a 32-character hex random salt.
 String _generateSalt() => List.generate(
@@ -18,6 +20,32 @@ String _generateSalt() => List.generate(
 
 /// Computes a lowercase hex SHA-256 digest of [input].
 String _sha256(String input) => sha256.convert(utf8.encode(input)).toString();
+
+enum PinVerificationOutcome {
+  valid,
+  invalid,
+  locked,
+  unavailable,
+  notConfigured,
+}
+
+class PinVerificationResult {
+  final PinVerificationOutcome outcome;
+  final int? remainingAttempts;
+  final DateTime? lockedUntil;
+  final String? message;
+  final bool usedLocalFallback;
+
+  const PinVerificationResult({
+    required this.outcome,
+    this.remainingAttempts,
+    this.lockedUntil,
+    this.message,
+    this.usedLocalFallback = false,
+  });
+
+  bool get isValid => outcome == PinVerificationOutcome.valid;
+}
 
 class AuthRepository {
   final _storage = const FlutterSecureStorage(
@@ -51,15 +79,29 @@ class AuthRepository {
 
   // ── User CRUD ─────────────────────────────────────────────────────────────
   Future<AppUser?> getUser() async {
-    final raw = HiveService.user.get('current_user');
-    if (raw == null) return null;
-    try {
-      return AppUser.fromJson(
-        json.decode(raw as String) as Map<String, dynamic>,
-      );
-    } catch (_) {
-      return null;
-    }
+    final currentRaw = HiveService.user.get('current_user');
+    final currentUser = _decodeAppUser(currentRaw);
+    if (currentUser != null) return currentUser;
+
+    final cloudRaw = HiveService.user.get(AppConstants.cloudUserKey);
+    final cloudData = _decodeJsonMap(cloudRaw);
+    if (cloudData == null) return null;
+
+    final name = (cloudData['name'] as String?)?.trim();
+    final email = (cloudData['email'] as String?)?.trim();
+    final currency = (cloudData['currency'] as String?)?.trim();
+    final monthlyBudget =
+        ((cloudData['monthlyBudget'] as num?) ?? 0).toDouble();
+
+    if (name == null || name.isEmpty) return null;
+
+    return AppUser(
+      name: name,
+      monthlyIncome: monthlyBudget,
+      email: email,
+      currencyCode: (currency == null || currency.isEmpty) ? 'INR' : currency,
+      createdAt: DateTime.now(),
+    );
   }
 
   Future<void> saveUser(AppUser user) async {
@@ -85,21 +127,116 @@ class AuthRepository {
     }
   }
 
-  /// Verify a PIN entered by the user against the locally-stored hash.
-  /// Supports the new salted format ("32hexSalt:64hexHash") as well as
-  /// the legacy unsalted format (existing installs) for backward compatibility.
-  Future<bool> verifyPin(String pin) async {
-    final stored = await _storage.read(key: AppConstants.pinKey);
-    if (stored == null) return false;
-    // Salted format: "32-char hex salt : 64-char sha-256 hex"
-    final colon = stored.indexOf(':');
-    if (colon == 32) {
-      final salt = stored.substring(0, 32);
-      final hash = stored.substring(33);
-      return _sha256(salt + pin) == hash;
+  /// Verify a PIN entered by the user.
+  ///
+  /// Uses server verification when available and falls back to local secure
+  /// storage only for resilient offline unlock behavior.
+  Future<PinVerificationResult> verifyPin(String pin, {Ref? ref}) async {
+    final sanitizedPin = pin.trim();
+
+    if (ref != null) {
+      try {
+        final dio = ref.read(dioProvider);
+
+        final hasLocalPin = await hasPin;
+        final options = hasLocalPin
+            ? Options(
+                connectTimeout: const Duration(seconds: 6),
+                sendTimeout: const Duration(seconds: 8),
+                receiveTimeout: const Duration(seconds: 8),
+              )
+            : Options(
+                connectTimeout: const Duration(seconds: 8),
+                sendTimeout: const Duration(seconds: 12),
+                receiveTimeout: const Duration(seconds: 20),
+              );
+
+        final res = await dio.post(
+          ApiEndpoints.verifyPin,
+          data: {'pin': sanitizedPin},
+          options: options,
+        );
+
+        return _parseServerPinVerification(res.data);
+      } on DioException catch (e) {
+        if (!_isTransientNetworkFailure(e)) {
+          if (e.response?.statusCode == 401) {
+            return const PinVerificationResult(
+              outcome: PinVerificationOutcome.unavailable,
+              message: 'Session expired. Please sign in again.',
+            );
+          }
+          return const PinVerificationResult(
+            outcome: PinVerificationOutcome.invalid,
+            message: 'PIN verification failed. Please try again.',
+          );
+        }
+
+        final localResult = await _verifyPinLocally(sanitizedPin);
+        if (localResult == true) {
+          return const PinVerificationResult(
+            outcome: PinVerificationOutcome.valid,
+            usedLocalFallback: true,
+          );
+        }
+
+        if (localResult == null) {
+          return const PinVerificationResult(
+            outcome: PinVerificationOutcome.unavailable,
+            message:
+                'Unable to verify PIN right now. Check your connection and try again.',
+          );
+        }
+
+        return const PinVerificationResult(
+          outcome: PinVerificationOutcome.unavailable,
+          message:
+              'Could not reach server to confirm PIN. Please try again in a moment.',
+          usedLocalFallback: true,
+        );
+      } catch (_) {
+        final localResult = await _verifyPinLocally(sanitizedPin);
+        if (localResult == true) {
+          return const PinVerificationResult(
+            outcome: PinVerificationOutcome.valid,
+            usedLocalFallback: true,
+          );
+        }
+        if (localResult == null) {
+          return const PinVerificationResult(
+            outcome: PinVerificationOutcome.unavailable,
+            message:
+                'Unable to verify PIN right now. Check your connection and try again.',
+          );
+        }
+        return const PinVerificationResult(
+          outcome: PinVerificationOutcome.invalid,
+          message: 'Incorrect PIN.',
+          usedLocalFallback: true,
+        );
+      }
     }
-    // Legacy unsalted fallback (pre-salt installs)
-    return _sha256(pin) == stored;
+
+    final localResult = await _verifyPinLocally(sanitizedPin);
+    if (localResult == true) {
+      return const PinVerificationResult(
+        outcome: PinVerificationOutcome.valid,
+        usedLocalFallback: true,
+      );
+    }
+
+    if (localResult == null) {
+      return const PinVerificationResult(
+        outcome: PinVerificationOutcome.notConfigured,
+        message: 'No PIN configured for this account.',
+      );
+    }
+
+    return const PinVerificationResult(
+      outcome: PinVerificationOutcome.invalid,
+      message: 'Incorrect PIN.',
+      usedLocalFallback: true,
+    );
   }
 
   /// Store a PIN hash received from the server (no re-hashing).
@@ -122,11 +259,99 @@ class AuthRepository {
 
   // ── Logout ────────────────────────────────────────────────────────────────
   Future<void> clearAll() async {
+    await HiveService.expenses.clear();
+    await HiveService.groups.clear();
+    await HiveService.budgets.clear();
     await HiveService.user.clear();
-    await HiveService.settings.put(AppConstants.hasAccountKey, false);
-    await HiveService.settings.put(AppConstants.isEmailVerifiedKey, false);
-    await HiveService.settings.put(AppConstants.hasProfileKey, false);
-    await HiveService.settings.put(AppConstants.hasOnboardedKey, false);
+    await HiveService.settings.clear();
+    await HiveService.goals.clear();
+    await HiveService.upiIds.clear();
+    await HiveService.pendingDeletions.clear();
+    await HiveService.expensePendingUpserts.clear();
+    await HiveService.budgetPendingUpserts.clear();
+    await HiveService.budgetPendingDeletions.clear();
+    await HiveService.goalPendingDeletions.clear();
+    await HiveService.goalPendingUpserts.clear();
     await _storage.deleteAll();
+  }
+
+  PinVerificationResult _parseServerPinVerification(dynamic rawResponse) {
+    final data = rawResponse is Map<String, dynamic>
+        ? (rawResponse['data'] as Map<String, dynamic>? ?? rawResponse)
+        : null;
+
+    if (data == null) {
+      return const PinVerificationResult(
+        outcome: PinVerificationOutcome.unavailable,
+        message: 'Unexpected PIN verification response. Please try again.',
+      );
+    }
+
+    if (data['valid'] == true) {
+      return const PinVerificationResult(outcome: PinVerificationOutcome.valid);
+    }
+
+    final lockedRaw = data['lockedUntil'];
+    DateTime? lockedUntil;
+    if (lockedRaw is String && lockedRaw.isNotEmpty) {
+      lockedUntil = DateTime.tryParse(lockedRaw)?.toLocal();
+    }
+
+    final remainingRaw = data['remainingAttempts'];
+    final remaining = remainingRaw is num ? remainingRaw.toInt() : null;
+
+    if (lockedUntil != null) {
+      return PinVerificationResult(
+        outcome: PinVerificationOutcome.locked,
+        lockedUntil: lockedUntil,
+        remainingAttempts: 0,
+      );
+    }
+
+    return PinVerificationResult(
+      outcome: PinVerificationOutcome.invalid,
+      remainingAttempts: remaining,
+    );
+  }
+
+  Future<bool?> _verifyPinLocally(String pin) async {
+    final stored = await _storage.read(key: AppConstants.pinKey);
+    if (stored == null || stored.isEmpty) return null;
+
+    final colon = stored.indexOf(':');
+    if (colon == 32 && stored.length == 97) {
+      final salt = stored.substring(0, 32);
+      final hash = stored.substring(33);
+      return _sha256(salt + pin) == hash;
+    }
+
+    return _sha256(pin) == stored;
+  }
+
+  bool _isTransientNetworkFailure(DioException e) {
+    return e.type == DioExceptionType.connectionError ||
+        e.type == DioExceptionType.connectionTimeout ||
+        e.type == DioExceptionType.sendTimeout ||
+        e.type == DioExceptionType.receiveTimeout;
+  }
+
+  AppUser? _decodeAppUser(dynamic raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      return AppUser.fromJson(json.decode(raw) as Map<String, dynamic>);
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Map<String, dynamic>? _decodeJsonMap(dynamic raw) {
+    if (raw is! String || raw.isEmpty) return null;
+    try {
+      final parsed = json.decode(raw);
+      if (parsed is Map<String, dynamic>) return parsed;
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 }

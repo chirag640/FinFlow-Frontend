@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/responsive.dart';
@@ -157,7 +158,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
               padding: const EdgeInsets.all(4),
               decoration: BoxDecoration(
                 color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: AppRadius.mdAll,
               ),
               child: Row(
                 children: [

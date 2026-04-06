@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,8 +30,8 @@ abstract class RequestHeaderKeys {
 // ignore: unused_element — consumed via cloud_auth_provider.dart
 final dioProvider = Provider<Dio>((ref) {
   const baseUrl = String.fromEnvironment('API_BASE_URL',
-      // defaultValue: 'http://10.0.2.2:3000/api/v1');
-  defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
+      defaultValue: 'http://10.0.2.2:3000/api/v1');
+  // defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
 
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
@@ -61,7 +62,9 @@ class AuthInterceptor extends Interceptor {
   );
   bool _isRefreshing = false;
   final Random _random = Random();
-  static final String _clientDeviceName = _buildClientDeviceName();
+  static final DeviceInfoPlugin _deviceInfo = DeviceInfoPlugin();
+  static String? _clientDeviceName;
+  static Future<String>? _clientDeviceNameFuture;
   // Requests that arrived while a refresh was already in-flight.
   // Each completer receives the new access token on refresh success,
   // or an error on failure, so all queued requests are replayed correctly.
@@ -80,7 +83,7 @@ class AuthInterceptor extends Interceptor {
     RequestOptions options,
     RequestInterceptorHandler handler,
   ) async {
-    _attachDeviceName(options);
+    await _attachDeviceName(options);
     _attachRequestId(options);
     _attachIdempotencyKey(options);
 
@@ -91,21 +94,98 @@ class AuthInterceptor extends Interceptor {
     handler.next(options);
   }
 
-  void _attachDeviceName(RequestOptions options) {
+  Future<void> _attachDeviceName(RequestOptions options) async {
     if (options.headers.containsKey(RequestHeaderKeys.deviceName)) return;
-    options.headers[RequestHeaderKeys.deviceName] = _clientDeviceName;
+    options.headers[RequestHeaderKeys.deviceName] =
+        await _resolveClientDeviceName();
   }
 
-  static String _buildClientDeviceName() {
+  static Future<String> _resolveClientDeviceName() async {
+    if (_clientDeviceName != null) return _clientDeviceName!;
+
+    _clientDeviceNameFuture ??= _computeClientDeviceName();
+    _clientDeviceName = await _clientDeviceNameFuture!;
+    return _clientDeviceName!;
+  }
+
+  static Future<String> _computeClientDeviceName() async {
+    if (kIsWeb) return 'Web Browser';
+
+    try {
+      switch (defaultTargetPlatform) {
+        case TargetPlatform.android:
+          final info = await _deviceInfo.androidInfo;
+          return _joinDeviceNameParts(
+            [info.manufacturer, info.model],
+            fallback: 'Android Device',
+          );
+        case TargetPlatform.iOS:
+          final info = await _deviceInfo.iosInfo;
+          return _firstAvailableValue(
+            [info.name, info.model, info.localizedModel],
+            fallback: 'iOS Device',
+          );
+        case TargetPlatform.macOS:
+          final info = await _deviceInfo.macOsInfo;
+          return _firstAvailableValue(
+            [info.computerName, info.model],
+            fallback: 'macOS Device',
+          );
+        case TargetPlatform.windows:
+          final info = await _deviceInfo.windowsInfo;
+          return _firstAvailableValue(
+            [info.computerName],
+            fallback: 'Windows Device',
+          );
+        case TargetPlatform.linux:
+          final info = await _deviceInfo.linuxInfo;
+          return _firstAvailableValue(
+            [info.prettyName, info.name],
+            fallback: 'Linux Device',
+          );
+        default:
+          return _fallbackClientDeviceName();
+      }
+    } catch (_) {
+      return _fallbackClientDeviceName();
+    }
+  }
+
+  static String _fallbackClientDeviceName() {
     if (kIsWeb) return 'Web Browser';
     return switch (defaultTargetPlatform) {
-      TargetPlatform.android => 'Flutter Android App',
-      TargetPlatform.iOS => 'Flutter iOS App',
-      TargetPlatform.macOS => 'Flutter macOS App',
-      TargetPlatform.windows => 'Flutter Windows App',
-      TargetPlatform.linux => 'Flutter Linux App',
-      _ => 'Flutter App',
+      TargetPlatform.android => 'Android Device',
+      TargetPlatform.iOS => 'iOS Device',
+      TargetPlatform.macOS => 'macOS Device',
+      TargetPlatform.windows => 'Windows Device',
+      TargetPlatform.linux => 'Linux Device',
+      _ => 'Unknown Device',
     };
+  }
+
+  static String _joinDeviceNameParts(
+    List<String?> values, {
+    required String fallback,
+  }) {
+    final cleaned = values
+        .map((v) => v?.trim() ?? '')
+        .where((v) => v.isNotEmpty)
+        .toList(growable: false);
+    if (cleaned.isEmpty) return fallback;
+    return cleaned.join(' ');
+  }
+
+  static String _firstAvailableValue(
+    List<String?> values, {
+    required String fallback,
+  }) {
+    for (final value in values) {
+      final normalized = value?.trim();
+      if (normalized != null && normalized.isNotEmpty) {
+        return normalized;
+      }
+    }
+    return fallback;
   }
 
   @override
@@ -266,13 +346,23 @@ class AuthInterceptor extends Interceptor {
   Future<String?> _tryRefresh() async {
     final refreshToken = await _storage.read(key: TokenKeys.refreshToken);
     if (refreshToken == null) return null;
+    final deviceName = await _resolveClientDeviceName();
 
     // Use _refreshDio (no AuthInterceptor attached) to avoid a deadlock:
     // if the main `dio` were used and the refresh token was expired/invalid,
     // the resulting 401 would re-enter this interceptor and hang forever.
-    final res = await _refreshDio.post(ApiEndpoints.refresh, data: {
-      'refreshToken': refreshToken,
-    });
+    final res = await _refreshDio.post(
+      ApiEndpoints.refresh,
+      data: {
+        'refreshToken': refreshToken,
+      },
+      options: Options(
+        headers: {
+          RequestHeaderKeys.deviceName: deviceName,
+          RequestHeaderKeys.requestId: _generateRequestId(),
+        },
+      ),
+    );
 
     final newAccess = res.data['data']['accessToken'] as String?;
     final newRefresh = res.data['data']['refreshToken'] as String?;

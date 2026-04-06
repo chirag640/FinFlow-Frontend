@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/group_expense.dart';
@@ -63,42 +64,24 @@ class _DebtSummaryWidgetState extends ConsumerState<DebtSummaryWidget> {
   }
 
   Future<void> _setUpiId(String memberId, String memberName) async {
-    final ctrl =
-        TextEditingController(text: ref.read(upiIdProvider)[memberId] ?? '');
-    await showDialog<void>(
+    final currentUpi = ref.read(upiIdProvider)[memberId] ?? '';
+    final newUpi = await DSInputDialog.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('UPI ID for $memberName'),
-        content: TextField(
-          controller: ctrl,
-          keyboardType: TextInputType.emailAddress,
-          autofocus: true,
-          decoration: const InputDecoration(
-            hintText: 'name@upi or 9876543210@paytm',
-            labelText: 'UPI ID / VPA',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () {
-              final id = ctrl.text.trim();
-              if (id.isEmpty) {
-                ref.read(upiIdProvider.notifier).remove(memberId);
-              } else {
-                ref.read(upiIdProvider.notifier).set(memberId, id);
-              }
-              Navigator.of(ctx).pop();
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      title: 'UPI ID for $memberName',
+      hintText: 'name@upi or 9876543210@paytm',
+      labelText: 'UPI ID / VPA',
+      initialValue: currentUpi,
+      keyboardType: TextInputType.emailAddress,
+      confirmLabel: 'Save',
     );
-    ctrl.dispose();
+
+    if (newUpi == null) return;
+
+    if (newUpi.isEmpty) {
+      ref.read(upiIdProvider.notifier).remove(memberId);
+    } else {
+      ref.read(upiIdProvider.notifier).set(memberId, newUpi);
+    }
   }
 
   Future<void> _settle(SettleUpTransaction s) async {

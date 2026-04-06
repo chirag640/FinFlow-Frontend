@@ -14,6 +14,7 @@ abstract class ApiEndpoints {
 
   static const String userProfile = '/users/me';
   static const String updatePin = '/users/pin';
+  static const String verifyPin = '/users/pin/verify';
   static const String userSearch = '/users/search';
   static const String notificationDevices = '/notifications/devices';
 

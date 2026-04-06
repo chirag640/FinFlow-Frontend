@@ -14,13 +14,54 @@ abstract class AppColors {
   // ── Semantic ───────────────────────────────────────────────────────────────
   static const Color success = Color(0xFF10B981);
   static const Color successLight = Color(0xFFD1FAE5);
+  static const Color successDark = Color(0xFF065F46);
+  
   static const Color warning = Color(0xFFF59E0B);
   static const Color warningLight = Color(0xFFFEF3C7);
+  static const Color warningDark = Color(0xFF92400E);
+  
   static const Color error = Color(0xFFEF4444);
   static const Color errorLight = Color(0xFFFEE2E2);
+  static const Color errorDark = Color(0xFF991B1B);
+  
+  static const Color info = Color(0xFF06B6D4);
+  static const Color infoLight = Color(0xFFCFFAFE);
+  static const Color infoDark = Color(0xFF0E7490);
+  
   static const Color income = Color(0xFF10B981);
   static const Color incomeLight = Color(0xFFD1FAE5);
   static const Color expense = Color(0xFFEF4444);
+
+  // ── Gradients ──────────────────────────────────────────────────────────────
+  static const LinearGradient primaryGradient = LinearGradient(
+    colors: [primary, primaryLight],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient successGradient = LinearGradient(
+    colors: [success, Color(0xFF34D399)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient warningGradient = LinearGradient(
+    colors: [warning, Color(0xFFFBBF24)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient errorGradient = LinearGradient(
+    colors: [error, Color(0xFFF87171)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
+  
+  static const LinearGradient accentGradient = LinearGradient(
+    colors: [accent, Color(0xFF22D3EE)],
+    begin: Alignment.topLeft,
+    end: Alignment.bottomRight,
+  );
 
   // ── Light Mode Neutrals ────────────────────────────────────────────────────
   static const Color background = Color(0xFFF8F9FB);

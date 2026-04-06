@@ -9,8 +9,12 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_async_state.dart';
+import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/router/app_router.dart';
+import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/responsive.dart';
+import '../providers/auth_provider.dart';
 import '../providers/cloud_auth_provider.dart';
 
 class VerifyEmailPage extends ConsumerStatefulWidget {
@@ -75,7 +79,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   Future<void> _verify() async {
     final code = _code;
     if (code.length < 6) {
-      _showSnack('Enter the 6-digit code sent to your email', isError: true);
+      showErrorSnackBar(context, 'Enter the 6-digit code sent to your email');
       return;
     }
 
@@ -90,10 +94,10 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     setState(() => _verifying = false);
 
     if (cloudUser != null) {
-      _showSnack('Email verified! Welcome to FinFlow 🎉');
+      showSuccessSnackBar(context, 'Email verified! Welcome to FinFlow');
       context.go(AppRoutes.dashboard);
     }
-    // Error shown by ref.listen below
+    // Error shown inline by DSAsyncState below.
   }
 
   Future<void> _resend() async {
@@ -105,7 +109,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     final ok = await ref.read(cloudAuthProvider.notifier).resendOtp(userId);
     if (!mounted) return;
     if (ok) {
-      _showSnack('A new code has been sent to your email');
+      showInfoSnackBar(context, 'A new code has been sent to your email');
       _startResendTimer();
     }
   }
@@ -128,13 +132,6 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     });
   }
 
-  void _showSnack(String msg, {bool isError = false}) {
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
-      backgroundColor: isError ? AppColors.error : AppColors.success,
-    ));
-  }
-
   String _maskEmail(String email) {
     final parts = email.split('@');
     if (parts.length != 2) return email;
@@ -150,11 +147,19 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     R.init(context);
     final cloudState = ref.watch(cloudAuthProvider);
 
-    ref.listen(cloudAuthProvider, (_, next) {
-      if (next.error != null) {
-        _showSnack(next.error!, isError: true);
-      }
-    });
+    final pendingUserId = cloudState.pendingVerificationUserId;
+    if (pendingUserId == null || pendingUserId.trim().isEmpty) {
+      return Scaffold(
+        backgroundColor: Theme.of(context).colorScheme.surface,
+        body: DSAsyncState.empty(
+          title: 'Verification session unavailable',
+          message: 'Start from sign in to request a fresh verification code.',
+          emoji: '📨',
+          actionLabel: 'Back to Sign In',
+          onAction: () => context.go(AppRoutes.login),
+        ),
+      );
+    }
 
     final email = cloudState.pendingVerificationEmail ?? '';
     final maskedEmail = email.isNotEmpty ? _maskEmail(email) : 'your email';
@@ -164,17 +169,20 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon:
               Icon(Icons.arrow_back_ios_rounded, color: colorScheme.onSurface),
-          onPressed: () {
-            // Clear pending verification state and go back to auth landing
-            ref.read(cloudAuthProvider.notifier).logout();
-            context.go(AppRoutes.authLanding);
+          onPressed: () async {
+            await ref.read(cloudAuthProvider.notifier).logout();
+            await ref.read(authStateProvider.notifier).logout();
+            if (context.mounted) {
+              context.go(AppRoutes.authLanding);
+            }
           },
         ),
       ),
@@ -229,6 +237,18 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                   ],
                 ),
               ).animate().fadeIn(delay: 150.ms),
+              const Gap(14),
+              if (_verifying || cloudState.isLoading)
+                const DSAsyncState.loading(
+                  compact: true,
+                  title: 'Verifying code...',
+                )
+              else if (cloudState.error != null)
+                DSAsyncState.error(
+                  compact: true,
+                  title: 'Verification issue',
+                  message: cloudState.error,
+                ),
               const Gap(36),
               // 6-digit OTP fields
               Row(
@@ -237,30 +257,11 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
               ).animate().fadeIn(delay: 200.ms).slideY(begin: 0.1),
               const Gap(36),
               // Verify button
-              SizedBox(
-                width: double.infinity,
-                height: R.s(52),
-                child: ElevatedButton(
-                  onPressed:
-                      (_verifying || cloudState.isLoading) ? null : _verify,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    disabledBackgroundColor:
-                        AppColors.primary.withValues(alpha: 0.5),
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(R.s(14))),
-                    elevation: 0,
-                  ),
-                  child: (_verifying || cloudState.isLoading)
-                      ? const SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white))
-                      : Text('Verify Email',
-                          style: TextStyle(
-                              fontSize: R.t(16), fontWeight: FontWeight.w700)),
-                ),
+              DSButton(
+                label: 'Verify Email',
+                onPressed:
+                    (_verifying || cloudState.isLoading) ? null : _verify,
+                isLoading: _verifying || cloudState.isLoading,
               ).animate().fadeIn(delay: 250.ms),
               const Gap(20),
               // Resend button
@@ -335,7 +336,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
             filled: true,
             fillColor: _digits[index].text.isNotEmpty
                 ? AppColors.primary.withValues(alpha: 0.08)
-                : Theme.of(context).colorScheme.surface,
+                : Theme.of(context).colorScheme.surfaceContainerHighest,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.s(12)),
               borderSide: const BorderSide(color: AppColors.border),

@@ -4,7 +4,9 @@ import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_async_state.dart';
 import '../../../../core/design/components/ds_button.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
 import '../../domain/entities/app_user.dart';
@@ -62,10 +64,12 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
   Widget build(BuildContext context) {
     R.init(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final cloudState = ref.watch(cloudAuthProvider);
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
         automaticallyImplyLeading: false,
       ),
@@ -96,6 +100,18 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                     height: 1.5,
                   ),
                 ).animate(delay: 80.ms).fadeIn(duration: 400.ms),
+                SizedBox(height: R.sm),
+                if (_isLoading)
+                  const DSAsyncState.loading(
+                    compact: true,
+                    title: 'Saving profile...',
+                  )
+                else if (cloudState.error != null)
+                  DSAsyncState.error(
+                    compact: true,
+                    title: 'Profile update failed',
+                    message: cloudState.error,
+                  ),
                 SizedBox(height: R.s(36)),
                 // Name field
                 Text(
@@ -121,7 +137,8 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   decoration: InputDecoration(
                     hintText: 'e.g. Arjun Sharma',
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(R.s(14)),
                       borderSide: BorderSide.none,
@@ -145,7 +162,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                 SizedBox(height: R.s(28)),
                 // Income field
                 Text(
-                  'MONTHLY INCOME (₹)',
+                  'MONTHLY INCOME (${CurrencyFormatter.symbol()})',
                   style: TextStyle(
                     fontSize: R.t(11),
                     fontWeight: FontWeight.w700,
@@ -168,14 +185,15 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   ),
                   decoration: InputDecoration(
                     hintText: 'e.g. 50000',
-                    prefixText: '₹ ',
+                    prefixText: '${CurrencyFormatter.symbol()} ',
                     prefixStyle: TextStyle(
                       fontSize: R.t(18),
                       fontWeight: FontWeight.w600,
                       color: AppColors.textSecondary,
                     ),
                     filled: true,
-                    fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+                    fillColor:
+                        Theme.of(context).colorScheme.surfaceContainerHighest,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(R.s(14)),
                       borderSide: BorderSide.none,

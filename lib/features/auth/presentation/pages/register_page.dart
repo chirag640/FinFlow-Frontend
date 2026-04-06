@@ -6,8 +6,10 @@ import 'package:gap/gap.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
-import '../../../../core/ui/error_feedback.dart';
+import '../../../../core/design/components/ds_async_state.dart';
+import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../../core/utils/validators.dart';
 import '../providers/cloud_auth_provider.dart';
 
 class RegisterPage extends ConsumerStatefulWidget {
@@ -49,21 +51,15 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     R.init(context);
     final authState = ref.watch(cloudAuthProvider);
 
-    listenForProviderError(
-      ref: ref,
-      context: context,
-      provider: cloudAuthProvider,
-      errorSelector: (s) => s.error,
-    );
-
     final screenWidth = MediaQuery.sizeOf(context).width;
     final hPad = screenWidth > 480 ? (screenWidth - 440) / 2 : 24.0;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
-        backgroundColor: Colors.transparent,
+        backgroundColor: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
         elevation: 0,
         leading: IconButton(
           icon:
@@ -93,6 +89,19 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                           ?.copyWith(color: AppColors.textSecondary))
                   .animate()
                   .fadeIn(delay: 80.ms),
+              const Gap(14),
+              if (authState.isLoading)
+                const DSAsyncState.loading(
+                  compact: true,
+                  title: 'Creating account...',
+                  message: 'Validating details and preparing verification.',
+                )
+              else if (authState.error != null)
+                DSAsyncState.error(
+                  compact: true,
+                  title: 'Registration failed',
+                  message: authState.error,
+                ),
               const Gap(32),
               Form(
                 key: _formKey,
@@ -141,9 +150,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
                     ),
-                    validator: (v) => v == null || v.length < 8
-                        ? 'Password must be 8+ characters'
-                        : null,
+                    validator: Validators.passwordStrong,
                   ),
                   const Gap(12),
                   TextFormField(
@@ -180,28 +187,10 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 ),
               ),
               const Gap(24),
-              SizedBox(
-                width: double.infinity,
-                height: R.s(52),
-                child: ElevatedButton(
-                  onPressed: authState.isLoading ? null : _register,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(R.s(14))),
-                    elevation: 0,
-                  ),
-                  child: authState.isLoading
-                      ? const SizedBox.square(
-                          dimension: 24,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : Text('Create Account',
-                          style: TextStyle(
-                              fontSize: R.t(16), fontWeight: FontWeight.w700)),
-                ),
+              DSButton(
+                label: 'Create Account',
+                onPressed: authState.isLoading ? null : _register,
+                isLoading: authState.isLoading,
               ).animate().fadeIn(delay: 300.ms),
               const Gap(20),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
@@ -227,14 +216,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
         labelText: label,
         prefixIcon: Icon(icon, color: AppColors.textTertiary, size: R.s(20)),
         filled: true,
-        fillColor: Theme.of(context).colorScheme.surface,
+        fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide.none,
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),
-          borderSide: const BorderSide(color: AppColors.border),
+          borderSide: BorderSide.none,
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(R.s(12)),

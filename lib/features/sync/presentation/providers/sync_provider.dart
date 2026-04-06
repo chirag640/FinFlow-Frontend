@@ -88,6 +88,8 @@ class SyncState {
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
 class SyncNotifier extends StateNotifier<SyncState> {
+  static const int _syncVersion = 1;
+
   final Ref _ref;
   final Random _random = Random();
   late final Future<void> _restoreSyncTimeFuture;
@@ -778,8 +780,9 @@ class SyncNotifier extends StateNotifier<SyncState> {
           debugPrint(
               '[FinFlow Sync] 📤 Delta push: ${expenses.length} expenses, ${budgets.length} budgets, ${goals.length} goals');
           final pushRes = await dio.post(
-            '/sync/push',
+            ApiEndpoints.syncPush,
             data: {
+              'syncVersion': _syncVersion,
               if (expenses.isNotEmpty) 'expenses': expenses,
               if (budgets.isNotEmpty) 'budgets': budgets,
               if (goals.isNotEmpty) 'goals': goals,
@@ -828,9 +831,13 @@ class SyncNotifier extends StateNotifier<SyncState> {
       // subsequent pull from silently skipping server-side changes that
       // occurred within the UTC-offset window.
       final since = state.lastSyncTime?.toUtc().toIso8601String() ?? '';
+      final pullQuery = <String, dynamic>{'syncVersion': _syncVersion};
+      if (since.isNotEmpty) {
+        pullQuery['since'] = since;
+      }
       final pullRes = await dio.get(
-        '/sync/pull',
-        queryParameters: since.isNotEmpty ? {'since': since} : {},
+        ApiEndpoints.syncPull,
+        queryParameters: pullQuery,
         options: Options(headers: {
           'x-sync-retry-count': _consecutivePullFailures.toString(),
         }),

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/app_radius.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/extensions.dart';
@@ -27,23 +29,12 @@ class ExpenseListTile extends ConsumerWidget {
         child: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
       ),
       confirmDismiss: (_) async {
-        return await showDialog<bool>(
+        return await DSConfirmDialog.show(
           context: context,
-          builder: (ctx) => AlertDialog(
-            title: const Text('Delete expense?'),
-            content: Text('Remove "${expense.description}" from your records?'),
-            actions: [
-              TextButton(
-                onPressed: () => ctx.pop(false),
-                child: const Text('Cancel'),
-              ),
-              TextButton(
-                onPressed: () => ctx.pop(true),
-                style: TextButton.styleFrom(foregroundColor: AppColors.error),
-                child: const Text('Delete'),
-              ),
-            ],
-          ),
+          title: 'Delete expense?',
+          message: 'Remove "${expense.description}" from your records?',
+          confirmLabel: 'Delete',
+          isDestructive: true,
         );
       },
       onDismissed: (_) {
@@ -65,7 +56,7 @@ class ExpenseListTile extends ConsumerWidget {
                 height: 44,
                 decoration: BoxDecoration(
                   color: expense.category.color.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.mdAll,
                 ),
                 child: Center(
                   child: Text(
@@ -109,7 +100,7 @@ class ExpenseListTile extends ConsumerWidget {
                             ),
                             decoration: BoxDecoration(
                               color: AppColors.primary.withValues(alpha: 0.1),
-                              borderRadius: BorderRadius.circular(4),
+                              borderRadius: AppRadius.xsAll,
                             ),
                             child: Row(
                               mainAxisSize: MainAxisSize.min,

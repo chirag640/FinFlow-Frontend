@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -5,9 +7,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/app_radius.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
 import '../../../../core/network/api_endpoints.dart';
 import '../../../../core/network/auth_interceptor.dart';
+import '../../../../core/network/network_error.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/ui/error_feedback.dart';
@@ -307,25 +312,18 @@ class GroupDetailPage extends ConsumerWidget {
                                 color: colorScheme.onErrorContainer,
                               ),
                             ),
-                            confirmDismiss: (_) async => await showDialog<bool>(
-                              context: ctx,
-                              builder: (d) => AlertDialog(
-                                title: const Text('Delete expense?'),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () => d.pop(false),
-                                    child: const Text('Cancel'),
-                                  ),
-                                  TextButton(
-                                    onPressed: () => d.pop(true),
-                                    style: TextButton.styleFrom(
-                                      foregroundColor: AppColors.error,
-                                    ),
-                                    child: const Text('Delete'),
-                                  ),
-                                ],
-                              ),
-                            ),
+                            confirmDismiss: (_) async {
+                              final shouldDelete = await DSConfirmDialog.show(
+                                context: ctx,
+                                title: 'Delete expense?',
+                                message:
+                                    'This removes "${exp.description}" for everyone in the group.',
+                                cancelLabel: 'Cancel',
+                                confirmLabel: 'Delete',
+                                isDestructive: true,
+                              );
+                              return shouldDelete ?? false;
+                            },
                             onDismissed: (_) async {
                               try {
                                 await ref
@@ -613,44 +611,84 @@ class _AddMemberDialog extends ConsumerStatefulWidget {
 
 class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
   final _ctrl = TextEditingController();
+  Timer? _debounce;
   List<Map<String, dynamic>> _results = [];
   bool _isSearching = false;
   bool _searched = false;
+  String? _searchError;
+  String _lastQuery = '';
+  int _searchToken = 0;
 
   @override
   void dispose() {
+    _debounce?.cancel();
     _ctrl.dispose();
     super.dispose();
   }
 
-  Future<void> _search() async {
-    final q = _ctrl.text.trim();
+  Future<void> _search({String? query}) async {
+    final q = (query ?? _ctrl.text).trim();
     if (q.length < 2) return;
+
+    final currentToken = ++_searchToken;
     setState(() {
       _isSearching = true;
       _searched = false;
+      _searchError = null;
     });
+
     try {
       final dio = ref.read(dioProvider);
       final res = await dio.get(
         ApiEndpoints.userSearch,
         queryParameters: {'username': q},
       );
+      if (!mounted || currentToken != _searchToken) return;
+
       final list = (res.data['data'] as List?) ?? [];
       setState(() {
         _results = list.cast<Map<String, dynamic>>();
         _isSearching = false;
         _searched = true;
+        _searchError = null;
+        _lastQuery = q;
       });
-    } on DioException {
+    } on DioException catch (e) {
+      if (!mounted || currentToken != _searchToken) return;
       setState(() {
+        _results = [];
         _isSearching = false;
         _searched = true;
+        _searchError = formatDioError(
+          e,
+          fallback: 'Unable to search users right now.',
+        );
       });
     }
   }
 
+  void _onQueryChanged(String value) {
+    _debounce?.cancel();
+    final q = value.trim();
+
+    if (q.length < 2) {
+      setState(() {
+        _results = [];
+        _searched = false;
+        _searchError = null;
+      });
+      return;
+    }
+
+    _debounce = Timer(const Duration(milliseconds: 350), () {
+      if (!mounted) return;
+      if (q == _lastQuery && _searched && _searchError == null) return;
+      _search(query: q);
+    });
+  }
+
   Future<void> _addUser(Map<String, dynamic> user) async {
+    final messenger = ScaffoldMessenger.of(context);
     Navigator.pop(context);
     try {
       await ref.read(groupProvider.notifier).addMemberByUserId(
@@ -659,14 +697,27 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
             (user['name'] as String?) ??
                 (user['username'] as String? ?? 'Member'),
           );
-    } catch (_) {}
+    } catch (e) {
+      final raw = e.toString();
+      final message = raw.startsWith('Exception: ')
+          ? raw.substring('Exception: '.length)
+          : raw;
+      messenger.showSnackBar(
+        SnackBar(
+            content: Text(message.isEmpty ? 'Failed to add member.' : message)),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final query = _ctrl.text.trim();
+
     return AlertDialog(
       backgroundColor: colorScheme.surface,
+      surfaceTintColor: Colors.transparent,
+      shape: RoundedRectangleBorder(borderRadius: AppRadius.lgAll),
       title: const Text('Add member'),
       content: SizedBox(
         width: double.maxFinite,
@@ -677,16 +728,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
               controller: _ctrl,
               textInputAction: TextInputAction.search,
               onSubmitted: (_) => _search(),
-              onChanged: (_) {
-                if (_ctrl.text.trim().length >= 2) {
-                  _search();
-                } else {
-                  setState(() {
-                    _results = [];
-                    _searched = false;
-                  });
-                }
-              },
+              onChanged: _onQueryChanged,
               decoration: InputDecoration(
                 hintText: 'Search by username (e.g. chirag19)',
                 prefixIcon: const Icon(Icons.person_search_outlined),
@@ -695,7 +737,7 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                   onPressed: _search,
                 ),
                 border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: AppRadius.mdAll,
                 ),
               ),
             ),
@@ -705,11 +747,29 @@ class _AddMemberDialogState extends ConsumerState<_AddMemberDialog> {
                 padding: EdgeInsets.all(16),
                 child: CircularProgressIndicator(),
               )
-            else if (_ctrl.text.trim().isNotEmpty &&
-                _ctrl.text.trim().length < 2)
+            else if (query.isNotEmpty && query.length < 2)
               const Padding(
                 padding: EdgeInsets.all(8),
                 child: Text('Type at least 2 characters to search.'),
+              )
+            else if (_searchError != null)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      _searchError!,
+                      style: TextStyle(color: colorScheme.error),
+                    ),
+                    const SizedBox(height: 8),
+                    TextButton.icon(
+                      onPressed: () => _search(),
+                      icon: const Icon(Icons.refresh_rounded),
+                      label: const Text('Retry search'),
+                    ),
+                  ],
+                ),
               )
             else if (_searched && _results.isEmpty)
               Padding(

@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/design/components/ds_empty_state.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/services/recurring_engine_service.dart';
@@ -324,26 +325,14 @@ class _RecurringTile extends ConsumerWidget {
   }
 
   Future<bool?> _confirmDelete(BuildContext context) {
-    return showDialog<bool>(
+    return DSConfirmDialog.show(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Delete recurring template?'),
-        content: Text(
+      title: 'Delete recurring template?',
+      message:
           '"${expense.description}" will be removed as a recurring template. '
           'Past expenses logged from this template will not be affected.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: AppColors.error),
-            onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
+      confirmLabel: 'Delete',
+      isDestructive: true,
     );
   }
 }

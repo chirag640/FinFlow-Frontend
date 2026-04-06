@@ -28,11 +28,11 @@ class DSBadge extends StatelessWidget {
 
   Color get _fg => switch (variant) {
         DSBadgeVariant.primary => AppColors.primaryDark,
-        DSBadgeVariant.success => const Color(0xFF065F46),
-        DSBadgeVariant.warning => const Color(0xFF92400E),
-        DSBadgeVariant.error => const Color(0xFF991B1B),
+        DSBadgeVariant.success => AppColors.successDark,
+        DSBadgeVariant.warning => AppColors.warningDark,
+        DSBadgeVariant.error => AppColors.errorDark,
         DSBadgeVariant.neutral => AppColors.textSecondary,
-        DSBadgeVariant.info => const Color(0xFF0E7490),
+        DSBadgeVariant.info => AppColors.infoDark,
       };
 
   @override

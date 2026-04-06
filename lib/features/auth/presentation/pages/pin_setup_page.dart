@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/design/app_colors.dart';
+import '../../../../core/design/components/ds_async_state.dart';
+import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/responsive.dart';
 import '../providers/auth_provider.dart';
 import '../widgets/pin_pad.dart';
@@ -25,6 +28,8 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
   String _pin = ''; // the new PIN
   String _confirmPin = ''; // confirmation of new PIN
   String? _error;
+  bool _isSubmitting = false;
+  bool _isVerifyingCurrentPin = false;
 
   @override
   void initState() {
@@ -39,6 +44,7 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
       };
 
   void _onDigit(String digit) {
+    if (_isSubmitting || _isVerifyingCurrentPin) return;
     if (_active.length >= 4) return;
     setState(() {
       _error = null;
@@ -63,6 +69,7 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
   }
 
   void _onDelete() {
+    if (_isSubmitting || _isVerifyingCurrentPin) return;
     setState(() {
       _error = null;
       switch (_step) {
@@ -83,14 +90,24 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
   }
 
   Future<void> _verifyOld() async {
+    setState(() {
+      _isVerifyingCurrentPin = true;
+      _error = null;
+    });
+
     final valid =
         await ref.read(authStateProvider.notifier).verifyPin(_currentPin);
     if (!mounted) return;
     if (valid) {
-      setState(() => _step = _Step.enterNew);
-    } else {
       setState(() {
-        _error = 'Incorrect PIN. Try again.';
+        _isVerifyingCurrentPin = false;
+        _step = _Step.enterNew;
+      });
+    } else {
+      final authError = ref.read(authStateProvider).error;
+      setState(() {
+        _isVerifyingCurrentPin = false;
+        _error = authError ?? 'Incorrect PIN. Try again.';
         _currentPin = '';
       });
     }
@@ -107,15 +124,34 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
       });
       return;
     }
-    await ref.read(authStateProvider.notifier).setupPin(_pin);
-    if (mounted && widget.isChangingPin) {
-      // Pop back to settings with a success message
-      Navigator.of(context).pop();
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN updated successfully ✓')),
-      );
+    setState(() {
+      _isSubmitting = true;
+      _error = null;
+    });
+
+    try {
+      await ref.read(authStateProvider.notifier).setupPin(_pin);
+      if (mounted && widget.isChangingPin) {
+        // Return to Settings with a success message.
+        final messenger = ScaffoldMessenger.of(context);
+        context.go(AppRoutes.settings);
+        messenger.showSnackBar(
+          const SnackBar(content: Text('PIN updated successfully ✓')),
+        );
+      }
+      // For initial setup, router redirect handles navigation automatically.
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _step = _Step.enterNew;
+        _confirmPin = '';
+        _error = 'Unable to save PIN. Please try again.';
+      });
+    } finally {
+      if (mounted) {
+        setState(() => _isSubmitting = false);
+      }
     }
-    // For initial setup, router redirect handles navigation automatically.
   }
 
   @override
@@ -142,9 +178,10 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
-      backgroundColor: colorScheme.surfaceContainerLow,
+      backgroundColor: colorScheme.surface,
       appBar: AppBar(
         backgroundColor: colorScheme.surface,
+        surfaceTintColor: Colors.transparent,
         foregroundColor: colorScheme.onSurface,
         leading: _step == _Step.confirmNew
             ? IconButton(
@@ -217,14 +254,27 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
                 );
               }),
             ),
-            if (_error != null) ...[
+            if (_isSubmitting || _isVerifyingCurrentPin) ...[
               SizedBox(height: R.md),
-              Text(
-                _error!,
-                style: TextStyle(
-                  fontSize: R.t(13),
-                  color: AppColors.error,
-                  fontWeight: FontWeight.w500,
+              Padding(
+                padding: EdgeInsets.symmetric(horizontal: 24),
+                child: DSAsyncState.loading(
+                  compact: true,
+                  title:
+                      _isVerifyingCurrentPin ? 'Verifying PIN' : 'Saving PIN',
+                  message: _isVerifyingCurrentPin
+                      ? 'Confirming your current PIN...'
+                      : 'Securing your app...',
+                ),
+              ),
+            ] else if (_error != null) ...[
+              SizedBox(height: R.md),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24),
+                child: DSAsyncState.error(
+                  compact: true,
+                  title: 'PIN setup issue',
+                  message: _error,
                 ),
               ).animate().shakeX(hz: 3, amount: 4),
             ],

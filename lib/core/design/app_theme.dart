@@ -174,6 +174,22 @@ abstract class AppTheme {
         showDragHandle: true,
         dragHandleColor: AppColors.border,
       ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.surface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.xlAll),
+        titleTextStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: AppColors.textPrimary,
+        ),
+        contentTextStyle: const TextStyle(
+          fontSize: 14,
+          height: 1.4,
+          color: AppColors.textSecondary,
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
+      ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.surfaceVariant,
         selectedColor: AppColors.primaryExtraLight,
@@ -387,6 +403,22 @@ abstract class AppTheme {
         ),
         showDragHandle: true,
         dragHandleColor: Color(0xFF475569),
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: AppColors.darkSurface,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(borderRadius: AppRadius.xlAll),
+        titleTextStyle: const TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.w700,
+          color: Color(0xFFE2E8F0),
+        ),
+        contentTextStyle: const TextStyle(
+          fontSize: 14,
+          height: 1.4,
+          color: Color(0xFFCBD5E1),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(24, 0, 24, 16),
       ),
       chipTheme: ChipThemeData(
         backgroundColor: AppColors.darkSurfaceVariant,
