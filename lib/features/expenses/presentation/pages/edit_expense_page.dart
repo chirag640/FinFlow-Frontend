@@ -1,4 +1,5 @@
 // Figma: Screen/EditExpense
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -12,6 +13,7 @@ import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_button.dart';
 import '../../../../core/network/auth_interceptor.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
@@ -22,6 +24,7 @@ import '../providers/expense_provider.dart';
 import '../services/expense_category_suggestion_service.dart';
 import '../services/receipt_ocr_service.dart';
 import '../services/receipt_upload_service.dart';
+import '../services/transaction_entry_suggestion_service.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/receipt_network_image.dart';
 import '../widgets/recurring_section_widget.dart';
@@ -49,6 +52,9 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
   late RecurringFrequency _recurringFrequency;
   late int _recurringDueDay;
   ExpenseCategory? _suggestedCategory;
+  List<TransactionEntrySuggestion> _entrySuggestions = const [];
+  Timer? _suggestionDebounceTimer;
+  bool _hasAppliedEntrySuggestion = false;
   String? _receiptImageBase64;
   String? _receiptImageMimeType;
   String? _receiptImageUrl;
@@ -74,10 +80,12 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
     _receiptImageUrl = e.receiptImageUrl;
     _receiptStorageKey = e.receiptStorageKey;
     _receiptOcrText = e.receiptOcrText;
+    _refreshSmartSuggestions(silent: true);
   }
 
   @override
   void dispose() {
+    _suggestionDebounceTimer?.cancel();
     _amountCtrl.dispose();
     _descCtrl.dispose();
     _noteCtrl.dispose();
@@ -122,13 +130,67 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
   }
 
   void _onDescriptionChanged(String value) {
-    final suggestion = ExpenseCategorySuggestionService.infer(value);
-    setState(() {
-      _suggestedCategory = suggestion;
-      if (!_categoryLockedByUser && suggestion != null) {
-        _category = suggestion;
-      }
+    _scheduleSmartSuggestionsRefresh();
+  }
+
+  void _onAmountChanged(String value) {
+    _scheduleSmartSuggestionsRefresh();
+  }
+
+  void _scheduleSmartSuggestionsRefresh() {
+    _suggestionDebounceTimer?.cancel();
+    _suggestionDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _refreshSmartSuggestions();
     });
+  }
+
+  void _setTransactionType(bool isIncome) {
+    if (_isIncome == isIncome) return;
+    setState(() {
+      _isIncome = isIncome;
+      _categoryLockedByUser = false;
+      _hasAppliedEntrySuggestion = false;
+    });
+    _refreshSmartSuggestions();
+  }
+
+  void _refreshSmartSuggestions({bool silent = false}) {
+    final history = ref.read(expenseProvider).expenses;
+    final suggestions = TransactionEntrySuggestionService.suggest(
+      history: history,
+      isIncome: _isIncome,
+      descriptionInput: _descCtrl.text,
+      amountInput: _amountCtrl.text,
+      limit: 4,
+    );
+
+    final historyCategory =
+        TransactionEntrySuggestionService.inferCategoryFromHistory(
+      history: history,
+      isIncome: _isIncome,
+      descriptionInput: _descCtrl.text,
+    );
+    final keywordCategory = _isIncome
+        ? null
+        : ExpenseCategorySuggestionService.infer(_descCtrl.text);
+    final inferredCategory = historyCategory ?? keywordCategory;
+
+    void applyState() {
+      _entrySuggestions = suggestions;
+      _suggestedCategory = inferredCategory;
+      if (!_categoryLockedByUser && inferredCategory != null) {
+        _category = inferredCategory;
+      }
+    }
+
+    if (silent) {
+      applyState();
+      return;
+    }
+
+    if (!mounted) return;
+    setState(applyState);
   }
 
   void _applySuggestedCategory() {
@@ -138,6 +200,33 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
       _category = suggestion;
       _categoryLockedByUser = true;
     });
+  }
+
+  void _applyEntrySuggestion(TransactionEntrySuggestion suggestion) {
+    final syncNotifier = ref.read(syncProvider.notifier);
+    setState(() {
+      _descCtrl.text = suggestion.description;
+      _descCtrl.selection =
+          TextSelection.collapsed(offset: _descCtrl.text.length);
+      if (_amountCtrl.text.trim().isEmpty) {
+        _amountCtrl.text = suggestion.amount.toStringAsFixed(2);
+      }
+      _category = suggestion.category;
+      _categoryLockedByUser = true;
+      _hasAppliedEntrySuggestion = true;
+    });
+    syncNotifier.trackSuggestionInteraction(
+      flow: 'edit_expense',
+      eventType: 'accepted',
+      isIncome: _isIncome,
+      suggestionDescription: suggestion.description,
+      suggestionCategory: suggestion.category.name,
+      suggestionAmount: suggestion.amount,
+      confidence: suggestion.confidence,
+      reason: suggestion.reason,
+      inputDescription: _descCtrl.text,
+    );
+    _refreshSmartSuggestions();
   }
 
   Future<void> _pickReceiptSource() async {
@@ -276,6 +365,20 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
     setState(() => _isLoading = true);
     // Capture sync notifier before await to avoid ref-after-dispose
     final syncNotifier = ref.read(syncProvider.notifier);
+    if (!_hasAppliedEntrySuggestion && _entrySuggestions.isNotEmpty) {
+      final topSuggestion = _entrySuggestions.first;
+      syncNotifier.trackSuggestionInteraction(
+        flow: 'edit_expense',
+        eventType: 'ignored',
+        isIncome: _isIncome,
+        suggestionDescription: topSuggestion.description,
+        suggestionCategory: topSuggestion.category.name,
+        suggestionAmount: topSuggestion.amount,
+        confidence: topSuggestion.confidence,
+        reason: topSuggestion.reason,
+        inputDescription: _descCtrl.text,
+      );
+    }
     final updated = widget.expense.copyWith(
       amount: double.parse(_amountCtrl.text.replaceAll(',', '')),
       description: _descCtrl.text.trim(),
@@ -353,12 +456,12 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                   _TypeTab(
                     label: '💸  Expense',
                     selected: !_isIncome,
-                    onTap: () => setState(() => _isIncome = false),
+                    onTap: () => _setTransactionType(false),
                   ),
                   _TypeTab(
                     label: '💰  Income',
                     selected: _isIncome,
-                    onTap: () => setState(() => _isIncome = true),
+                    onTap: () => _setTransactionType(true),
                   ),
                 ],
               ),
@@ -421,7 +524,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                             border: InputBorder.none,
                             contentPadding: EdgeInsets.zero,
                           ),
-                          onChanged: (_) => setState(() {}),
+                          onChanged: _onAmountChanged,
                         ),
                       ),
                     ],
@@ -473,6 +576,36 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                       child: const Text('Use'),
                     ),
                 ],
+              ),
+            ],
+            if (_entrySuggestions.isNotEmpty) ...[
+              SizedBox(height: R.xs),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _entrySuggestions
+                      .map(
+                        (entry) => Padding(
+                          padding: EdgeInsets.only(right: R.xs),
+                          child: ActionChip(
+                            avatar: Icon(
+                              _isIncome
+                                  ? Icons.trending_up_rounded
+                                  : Icons.history_rounded,
+                              size: R.s(14),
+                              color: AppColors.textSecondary,
+                            ),
+                            label: Text(
+                              '${entry.description} • ${CurrencyFormatter.format(entry.amount)}',
+                              style: TextStyle(fontSize: R.t(11)),
+                            ),
+                            tooltip: '${entry.reason} (${entry.confidence}%)',
+                            onPressed: () => _applyEntrySuggestion(entry),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
             ],
             SizedBox(height: R.s(20)),

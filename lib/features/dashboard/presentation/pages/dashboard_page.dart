@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
@@ -16,6 +18,7 @@ import '../../../budgets/presentation/providers/budget_provider.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../../expenses/presentation/services/expense_category_suggestion_service.dart';
+import '../../../expenses/presentation/services/transaction_entry_suggestion_service.dart';
 import '../../../goals/domain/entities/savings_goal.dart';
 import '../../../goals/presentation/providers/goals_provider.dart';
 import '../../../sync/presentation/providers/sync_provider.dart';
@@ -82,6 +85,45 @@ class _DashboardPageState extends ConsumerState<DashboardPage> {
               icon: const Icon(Icons.savings_rounded),
               onPressed: () => context.push(AppRoutes.goals),
               tooltip: 'Savings Goals',
+            ),
+          ),
+          Semantics(
+            label: budgetState.overspentEnvelopesCount > 0
+                ? '${budgetState.overspentEnvelopesCount} budgets over limit, tap to review'
+                : 'Open budgets',
+            button: true,
+            child: Stack(
+              clipBehavior: Clip.none,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.account_balance_wallet_rounded),
+                  onPressed: () => context.push(AppRoutes.budgets),
+                  tooltip: 'Budgets',
+                ),
+                if (budgetState.overspentEnvelopesCount > 0)
+                  Positioned(
+                    right: 6,
+                    top: 6,
+                    child: Container(
+                      width: R.s(18),
+                      height: R.s(18),
+                      decoration: const BoxDecoration(
+                        color: AppColors.error,
+                        shape: BoxShape.circle,
+                      ),
+                      child: Center(
+                        child: Text(
+                          '${budgetState.overspentEnvelopesCount > 9 ? '9+' : budgetState.overspentEnvelopesCount}',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: R.t(9),
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
             ),
           ),
           // Sync status button — tap to force sync, icon shows sync state
@@ -742,12 +784,22 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
   final _descCtrl = TextEditingController();
   ExpenseCategory _category = ExpenseCategory.food;
   ExpenseCategory? _suggestedCategory;
+  List<TransactionEntrySuggestion> _entrySuggestions = const [];
+  Timer? _suggestionDebounceTimer;
+  bool _hasAppliedEntrySuggestion = false;
   bool _categoryLockedByUser = false;
   bool _isIncome = false;
   bool _isSaving = false;
 
   @override
+  void initState() {
+    super.initState();
+    _refreshSmartSuggestions(silent: true);
+  }
+
+  @override
   void dispose() {
+    _suggestionDebounceTimer?.cancel();
     _amountCtrl.dispose();
     _descCtrl.dispose();
     super.dispose();
@@ -772,6 +824,20 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
     // Capture notifiers BEFORE any await — prevents ref-after-dispose crash
     final expenseNotifier = ref.read(expenseProvider.notifier);
     final syncNotifier = ref.read(syncProvider.notifier);
+    if (!_hasAppliedEntrySuggestion && _entrySuggestions.isNotEmpty) {
+      final topSuggestion = _entrySuggestions.first;
+      syncNotifier.trackSuggestionInteraction(
+        flow: 'quick_add',
+        eventType: 'ignored',
+        isIncome: _isIncome,
+        suggestionDescription: topSuggestion.description,
+        suggestionCategory: topSuggestion.category.name,
+        suggestionAmount: topSuggestion.amount,
+        confidence: topSuggestion.confidence,
+        reason: topSuggestion.reason,
+        inputDescription: _descCtrl.text,
+      );
+    }
 
     setState(() => _isSaving = true);
     await expenseNotifier.addExpense(
@@ -790,13 +856,63 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
   }
 
   void _onDescriptionChanged(String value) {
-    final suggestion = ExpenseCategorySuggestionService.infer(value);
-    setState(() {
-      _suggestedCategory = suggestion;
-      if (!_categoryLockedByUser && suggestion != null) {
-        _category = suggestion;
-      }
+    _scheduleSmartSuggestionsRefresh();
+  }
+
+  void _scheduleSmartSuggestionsRefresh() {
+    _suggestionDebounceTimer?.cancel();
+    _suggestionDebounceTimer = Timer(const Duration(milliseconds: 250), () {
+      if (!mounted) return;
+      _refreshSmartSuggestions();
     });
+  }
+
+  void _setTransactionType(bool isIncome) {
+    if (_isIncome == isIncome) return;
+    setState(() {
+      _isIncome = isIncome;
+      _categoryLockedByUser = false;
+      _hasAppliedEntrySuggestion = false;
+    });
+    _refreshSmartSuggestions();
+  }
+
+  void _refreshSmartSuggestions({bool silent = false}) {
+    final history = ref.read(expenseProvider).expenses;
+    final suggestions = TransactionEntrySuggestionService.suggest(
+      history: history,
+      isIncome: _isIncome,
+      descriptionInput: _descCtrl.text,
+      amountInput: _amountCtrl.text,
+      limit: 4,
+    );
+
+    final historyCategory =
+        TransactionEntrySuggestionService.inferCategoryFromHistory(
+      history: history,
+      isIncome: _isIncome,
+      descriptionInput: _descCtrl.text,
+    );
+    final keywordCategory = _isIncome
+        ? null
+        : ExpenseCategorySuggestionService.infer(_descCtrl.text);
+    final inferredCategory = historyCategory ?? keywordCategory;
+
+    void applyState() {
+      _entrySuggestions = suggestions;
+      _suggestedCategory = inferredCategory;
+      if (!_categoryLockedByUser && inferredCategory != null) {
+        _category = inferredCategory;
+      }
+    }
+
+    if (silent) {
+      applyState();
+      return;
+    }
+
+    if (!mounted) return;
+    setState(applyState);
   }
 
   void _applySuggestedCategory() {
@@ -806,6 +922,33 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
       _category = suggestion;
       _categoryLockedByUser = true;
     });
+  }
+
+  void _applyEntrySuggestion(TransactionEntrySuggestion suggestion) {
+    final syncNotifier = ref.read(syncProvider.notifier);
+    setState(() {
+      _descCtrl.text = suggestion.description;
+      _descCtrl.selection =
+          TextSelection.collapsed(offset: _descCtrl.text.length);
+      if (_amountCtrl.text.trim().isEmpty) {
+        _amountCtrl.text = suggestion.amount.toStringAsFixed(2);
+      }
+      _category = suggestion.category;
+      _categoryLockedByUser = true;
+      _hasAppliedEntrySuggestion = true;
+    });
+    syncNotifier.trackSuggestionInteraction(
+      flow: 'quick_add',
+      eventType: 'accepted',
+      isIncome: _isIncome,
+      suggestionDescription: suggestion.description,
+      suggestionCategory: suggestion.category.name,
+      suggestionAmount: suggestion.amount,
+      confidence: suggestion.confidence,
+      reason: suggestion.reason,
+      inputDescription: _descCtrl.text,
+    );
+    _refreshSmartSuggestions();
   }
 
   @override
@@ -874,12 +1017,12 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                   _TypeToggle(
                     label: '💸  Expense',
                     selected: !_isIncome,
-                    onTap: () => setState(() => _isIncome = false),
+                    onTap: () => _setTransactionType(false),
                   ),
                   _TypeToggle(
                     label: '💰  Income',
                     selected: _isIncome,
-                    onTap: () => setState(() => _isIncome = true),
+                    onTap: () => _setTransactionType(true),
                   ),
                 ],
               ),
@@ -894,6 +1037,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
               inputFormatters: [
                 FilteringTextInputFormatter.allow(RegExp(r'[\d.]')),
               ],
+              onChanged: (_) => _scheduleSmartSuggestionsRefresh(),
               textInputAction: TextInputAction.next,
               style: const TextStyle(
                 fontSize: 28,
@@ -976,6 +1120,36 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                       child: const Text('Use'),
                     ),
                 ],
+              ),
+            ],
+            if (_entrySuggestions.isNotEmpty) ...[
+              const SizedBox(height: 6),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: _entrySuggestions
+                      .map(
+                        (entry) => Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ActionChip(
+                            avatar: Icon(
+                              _isIncome
+                                  ? Icons.trending_up_rounded
+                                  : Icons.history_rounded,
+                              size: 14,
+                              color: AppColors.textSecondary,
+                            ),
+                            label: Text(
+                              '${entry.description} • ${CurrencyFormatter.format(entry.amount)}',
+                              style: const TextStyle(fontSize: 11),
+                            ),
+                            tooltip: '${entry.reason} (${entry.confidence}%)',
+                            onPressed: () => _applyEntrySuggestion(entry),
+                          ),
+                        ),
+                      )
+                      .toList(),
+                ),
               ),
             ],
             const SizedBox(height: 12),

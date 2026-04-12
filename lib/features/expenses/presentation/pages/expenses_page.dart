@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -6,6 +7,7 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_async_state.dart';
+import '../../../../core/design/components/ds_dialog.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/theme/radius.dart';
 import '../../../../core/utils/currency_formatter.dart';
@@ -25,6 +27,9 @@ class ExpensesPage extends ConsumerStatefulWidget {
 
 class _ExpensesPageState extends ConsumerState<ExpensesPage> {
   bool _searchActive = false;
+  bool _selectionMode = false;
+  bool _isBulkActionInProgress = false;
+  final Set<String> _selectedExpenseIds = <String>{};
   final _searchCtrl = TextEditingController();
   late final ExpenseNotifier _expenseNotifier;
 
@@ -43,11 +48,117 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
   }
 
   void _toggleSearch() {
+    if (_selectionMode) {
+      _setSelectionMode(false);
+    }
     setState(() => _searchActive = !_searchActive);
     if (!_searchActive) {
       _searchCtrl.clear();
       _expenseNotifier.clearSearch();
     }
+  }
+
+  void _setSelectionMode(bool enabled) {
+    setState(() {
+      _selectionMode = enabled;
+      if (!enabled) {
+        _selectedExpenseIds.clear();
+      } else {
+        _searchActive = false;
+        _searchCtrl.clear();
+        _expenseNotifier.clearSearch();
+      }
+    });
+  }
+
+  void _toggleExpenseSelection(String expenseId) {
+    setState(() {
+      if (_selectedExpenseIds.contains(expenseId)) {
+        _selectedExpenseIds.remove(expenseId);
+      } else {
+        _selectedExpenseIds.add(expenseId);
+      }
+      _selectionMode = _selectedExpenseIds.isNotEmpty;
+    });
+  }
+
+  Future<void> _applyBatchDelete(WidgetRef ref) async {
+    if (_selectedExpenseIds.isEmpty || _isBulkActionInProgress) return;
+    final selected = _selectedExpenseIds.toList(growable: false);
+    final confirmed = await DSConfirmDialog.show(
+      context: context,
+      title: 'Delete selected expenses?',
+      message:
+          'This will remove ${selected.length} selected transaction(s) from your records.',
+      confirmLabel: 'Delete',
+      isDestructive: true,
+    );
+    if (confirmed != true) return;
+
+    setState(() => _isBulkActionInProgress = true);
+    await ref.read(expenseProvider.notifier).deleteExpensesBulk(selected);
+    if (!mounted) return;
+    setState(() {
+      _isBulkActionInProgress = false;
+      _selectionMode = false;
+      _selectedExpenseIds.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Deleted ${selected.length} expense(s)')),
+    );
+  }
+
+  Future<ExpenseCategory?> _pickBatchCategory() {
+    return showModalBottomSheet<ExpenseCategory>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: ListView(
+          shrinkWrap: true,
+          children: [
+            const ListTile(
+              title: Text(
+                'Select category',
+                style: TextStyle(fontWeight: FontWeight.w700),
+              ),
+            ),
+            ...ExpenseCategory.values.map(
+              (category) => ListTile(
+                leading:
+                    Text(category.emoji, style: const TextStyle(fontSize: 20)),
+                title: Text(category.label),
+                onTap: () => Navigator.of(ctx).pop(category),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _applyBatchCategory(WidgetRef ref) async {
+    if (_selectedExpenseIds.isEmpty || _isBulkActionInProgress) return;
+    final category = await _pickBatchCategory();
+    if (category == null) return;
+
+    final selected = _selectedExpenseIds.toList(growable: false);
+    setState(() => _isBulkActionInProgress = true);
+    await ref.read(expenseProvider.notifier).updateExpensesCategoryBulk(
+          ids: selected,
+          category: category,
+        );
+    if (!mounted) return;
+    setState(() {
+      _isBulkActionInProgress = false;
+      _selectionMode = false;
+      _selectedExpenseIds.clear();
+    });
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Updated ${selected.length} expense(s) to ${category.label}',
+        ),
+      ),
+    );
   }
 
   void _showFilterSheet(
@@ -120,7 +231,20 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
               ),
             ),
           Expanded(
-              child: _ExpenseGroupedList(expenses: state.filteredExpenses)),
+              child: _ExpenseGroupedList(
+            expenses: state.filteredExpenses,
+            selectionMode: _selectionMode,
+            selectedIds: _selectedExpenseIds,
+            onToggleSelection: _toggleExpenseSelection,
+            onStartSelection: (id) {
+              if (_selectionMode) {
+                _toggleExpenseSelection(id);
+                return;
+              }
+              _setSelectionMode(true);
+              _toggleExpenseSelection(id);
+            },
+          )),
         ],
       );
     }
@@ -139,36 +263,82 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
             toolbarHeight: 64,
             titleSpacing: 20,
             actionsPadding: const EdgeInsets.only(right: 8),
-            title: _searchActive
-                ? TextField(
-                    controller: _searchCtrl,
-                    autofocus: true,
-                    decoration: InputDecoration(
-                      hintText: 'Search expenses...',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(
-                        color: colors.onSurfaceVariant,
-                        fontSize: 16,
-                      ),
-                    ),
+            title: _selectionMode
+                ? Text(
+                    '${_selectedExpenseIds.length} selected',
                     style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w500,
-                      color: colors.onSurface,
-                    ),
-                    onChanged: (q) =>
-                        ref.read(expenseProvider.notifier).setSearch(q),
-                  )
-                : Text(
-                    'Expenses',
-                    style: TextStyle(
-                      fontSize: 22,
+                      fontSize: 20,
                       fontWeight: FontWeight.w700,
                       color: colors.onSurface,
                     ),
-                  ),
+                  )
+                : _searchActive
+                    ? TextField(
+                        controller: _searchCtrl,
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: 'Search expenses...',
+                          border: InputBorder.none,
+                          hintStyle: TextStyle(
+                            color: colors.onSurfaceVariant,
+                            fontSize: 16,
+                          ),
+                        ),
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w500,
+                          color: colors.onSurface,
+                        ),
+                        onChanged: (q) =>
+                            ref.read(expenseProvider.notifier).setSearch(q),
+                      )
+                    : Text(
+                        'Expenses',
+                        style: TextStyle(
+                          fontSize: 22,
+                          fontWeight: FontWeight.w700,
+                          color: colors.onSurface,
+                        ),
+                      ),
             actions: [
-              if (!_searchActive) ...[
+              if (_selectionMode) ...[
+                Semantics(
+                  label: 'Change category for selected expenses',
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.label_outline_rounded),
+                    onPressed:
+                        _selectedExpenseIds.isEmpty || _isBulkActionInProgress
+                            ? null
+                            : () => _applyBatchCategory(ref),
+                    tooltip: 'Change Category',
+                  ),
+                ),
+                Semantics(
+                  label: 'Delete selected expenses',
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.delete_outline_rounded,
+                        color: AppColors.error),
+                    onPressed:
+                        _selectedExpenseIds.isEmpty || _isBulkActionInProgress
+                            ? null
+                            : () => _applyBatchDelete(ref),
+                    tooltip: 'Delete Selected',
+                  ),
+                ),
+                Semantics(
+                  label: 'Exit selection mode',
+                  button: true,
+                  child: IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: _isBulkActionInProgress
+                        ? null
+                        : () => _setSelectionMode(false),
+                    tooltip: 'Done',
+                  ),
+                ),
+              ] else if (!_searchActive) ...[
                 Semantics(
                   label: 'Open expense analytics',
                   button: true,
@@ -228,29 +398,42 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
                     ],
                   ),
                 ),
-              ],
-              Semantics(
-                label: _searchActive ? 'Close search' : 'Search expenses',
-                button: true,
-                child: IconButton(
-                  icon: AnimatedSwitcher(
-                    duration: const Duration(milliseconds: 200),
-                    child: _searchActive
-                        ? Icon(
-                            Icons.close_rounded,
-                            key: const ValueKey('close'),
-                            color: colors.onSurface,
-                          )
-                        : Icon(Icons.search_rounded,
-                            key: const ValueKey('search'),
-                            color: colors.onSurfaceVariant),
+                Semantics(
+                  label: 'Select multiple expenses',
+                  button: true,
+                  child: IconButton(
+                    icon: Icon(
+                      Icons.checklist_rtl_rounded,
+                      color: colors.onSurfaceVariant,
+                    ),
+                    onPressed: () => _setSelectionMode(true),
+                    tooltip: 'Select Multiple',
                   ),
-                  onPressed: _toggleSearch,
-                  tooltip: _searchActive ? 'Close search' : 'Search',
                 ),
-              ),
+              ],
+              if (!_selectionMode)
+                Semantics(
+                  label: _searchActive ? 'Close search' : 'Search expenses',
+                  button: true,
+                  child: IconButton(
+                    icon: AnimatedSwitcher(
+                      duration: const Duration(milliseconds: 200),
+                      child: _searchActive
+                          ? Icon(
+                              Icons.close_rounded,
+                              key: const ValueKey('close'),
+                              color: colors.onSurface,
+                            )
+                          : Icon(Icons.search_rounded,
+                              key: const ValueKey('search'),
+                              color: colors.onSurfaceVariant),
+                    ),
+                    onPressed: _toggleSearch,
+                    tooltip: _searchActive ? 'Close search' : 'Search',
+                  ),
+                ),
             ],
-            bottom: _searchActive
+            bottom: _searchActive || _selectionMode
                 ? null
                 : PreferredSize(
                     preferredSize: const Size.fromHeight(144),
@@ -265,14 +448,16 @@ class _ExpensesPageState extends ConsumerState<ExpensesPage> {
         ],
         body: buildBody(),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => context.push(AppRoutes.addExpense),
-        icon: const Icon(Icons.add_rounded),
-        label: const Text(
-          'Add Expense',
-          style: TextStyle(fontWeight: FontWeight.w600),
-        ),
-      ),
+      floatingActionButton: _selectionMode
+          ? null
+          : FloatingActionButton.extended(
+              onPressed: () => context.push(AppRoutes.addExpense),
+              icon: const Icon(Icons.add_rounded),
+              label: const Text(
+                'Add Expense',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+            ),
     );
   }
 }
@@ -449,7 +634,18 @@ class _SummaryItem extends StatelessWidget {
 
 class _ExpenseGroupedList extends StatelessWidget {
   final List<Expense> expenses;
-  const _ExpenseGroupedList({required this.expenses});
+  final bool selectionMode;
+  final Set<String> selectedIds;
+  final ValueChanged<String> onToggleSelection;
+  final ValueChanged<String> onStartSelection;
+
+  const _ExpenseGroupedList({
+    required this.expenses,
+    required this.selectionMode,
+    required this.selectedIds,
+    required this.onToggleSelection,
+    required this.onStartSelection,
+  });
 
   Map<String, List<Expense>> get _grouped {
     final map = <String, List<Expense>>{};
@@ -526,10 +722,19 @@ class _ExpenseGroupedList extends StatelessWidget {
                   endIndent: 16,
                   color: AppColors.border,
                 ),
-                itemBuilder: (context, i) => ExpenseListTile(expense: group[i])
-                    .animate(delay: Duration(milliseconds: 40 * i))
-                    .fadeIn(duration: 300.ms)
-                    .slideX(begin: 0.05, end: 0),
+                itemBuilder: (context, i) {
+                  final expense = group[i];
+                  return ExpenseListTile(
+                    expense: expense,
+                    selectionMode: selectionMode,
+                    selected: selectedIds.contains(expense.id),
+                    onSelectionChanged: (_) => onToggleSelection(expense.id),
+                    onLongPress: () => onStartSelection(expense.id),
+                  )
+                      .animate(delay: Duration(milliseconds: 40 * i))
+                      .fadeIn(duration: 300.ms)
+                      .slideX(begin: 0.05, end: 0);
+                },
               ),
             ),
           ],
@@ -560,12 +765,31 @@ class _FilterSheet extends StatefulWidget {
 class _FilterSheetState extends State<_FilterSheet> {
   late Set<ExpenseCategory> _categories;
   bool? _incomeOnly; // null = both, true = income, false = expenses
+  DateTime? _dateFrom;
+  DateTime? _dateTo;
+  late final TextEditingController _minAmountCtrl;
+  late final TextEditingController _maxAmountCtrl;
 
   @override
   void initState() {
     super.initState();
     _categories = Set.from(widget.current.categories);
     _incomeOnly = widget.current.incomeOnly;
+    _dateFrom = widget.current.dateFrom;
+    _dateTo = widget.current.dateTo;
+    _minAmountCtrl = TextEditingController(
+      text: widget.current.minAmount?.toStringAsFixed(2) ?? '',
+    );
+    _maxAmountCtrl = TextEditingController(
+      text: widget.current.maxAmount?.toStringAsFixed(2) ?? '',
+    );
+  }
+
+  @override
+  void dispose() {
+    _minAmountCtrl.dispose();
+    _maxAmountCtrl.dispose();
+    super.dispose();
   }
 
   void _toggleCategory(ExpenseCategory cat) {
@@ -579,9 +803,35 @@ class _FilterSheetState extends State<_FilterSheet> {
   }
 
   void _apply() {
+    final minAmount = _parseOptionalAmount(_minAmountCtrl.text);
+    final maxAmount = _parseOptionalAmount(_maxAmountCtrl.text);
+    if (minAmount != null && maxAmount != null && minAmount > maxAmount) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Minimum amount cannot be greater than maximum amount.'),
+        ),
+      );
+      return;
+    }
+    if (_dateFrom != null && _dateTo != null && _dateFrom!.isAfter(_dateTo!)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Start date cannot be after end date.'),
+        ),
+      );
+      return;
+    }
+
     widget.onApply(
       ExpenseFilters(
-          categories: Set.from(_categories), incomeOnly: _incomeOnly),
+        categories: Set.from(_categories),
+        incomeOnly: _incomeOnly,
+        dateFrom: _dateFrom,
+        dateTo: _dateTo,
+        minAmount: minAmount,
+        maxAmount: maxAmount,
+      ),
     );
     Navigator.of(context).pop();
   }
@@ -592,7 +842,38 @@ class _FilterSheetState extends State<_FilterSheet> {
   }
 
   int get _pendingCount =>
-      (_categories.isEmpty ? 0 : 1) + (_incomeOnly == null ? 0 : 1);
+      (_categories.isEmpty ? 0 : 1) +
+      (_incomeOnly == null ? 0 : 1) +
+      (_dateFrom == null && _dateTo == null ? 0 : 1) +
+      (_minAmountCtrl.text.trim().isEmpty && _maxAmountCtrl.text.trim().isEmpty
+          ? 0
+          : 1);
+
+  double? _parseOptionalAmount(String raw) {
+    final normalized = raw.replaceAll(',', '').trim();
+    if (normalized.isEmpty) return null;
+    final value = double.tryParse(normalized);
+    if (value == null || value < 0) return null;
+    return value;
+  }
+
+  Future<void> _pickDate({required bool isFrom}) async {
+    final current = isFrom ? _dateFrom : _dateTo;
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: current ?? DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+    );
+    if (picked == null) return;
+    setState(() {
+      if (isFrom) {
+        _dateFrom = picked;
+      } else {
+        _dateTo = picked;
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -697,6 +978,146 @@ class _FilterSheetState extends State<_FilterSheet> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 24),
+                    // ── Date range section
+                    const Text(
+                      'DATE RANGE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textTertiary,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickDate(isFrom: true),
+                            icon: const Icon(Icons.event_available_rounded),
+                            label: Text(
+                              _dateFrom == null
+                                  ? 'From'
+                                  : DateFormat('dd MMM yyyy')
+                                      .format(_dateFrom!),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: OutlinedButton.icon(
+                            onPressed: () => _pickDate(isFrom: false),
+                            icon: const Icon(Icons.event_rounded),
+                            label: Text(
+                              _dateTo == null
+                                  ? 'To'
+                                  : DateFormat('dd MMM yyyy').format(_dateTo!),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_dateFrom != null || _dateTo != null)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => setState(() {
+                            _dateFrom = null;
+                            _dateTo = null;
+                          }),
+                          child: const Text('Clear date range'),
+                        ),
+                      ),
+                    const SizedBox(height: 16),
+                    // ── Amount range section
+                    const Text(
+                      'AMOUNT RANGE',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textTertiary,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: _minAmountCtrl,
+                            onChanged: (_) => setState(() {}),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.]'),
+                              ),
+                            ],
+                            decoration: InputDecoration(
+                              prefixText: '₹ ',
+                              labelText: 'Min',
+                              filled: true,
+                              fillColor: colors.surfaceContainerHighest,
+                              border: OutlineInputBorder(
+                                borderRadius: AppRadius.md,
+                                borderSide:
+                                    BorderSide(color: colors.outlineVariant),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: AppRadius.md,
+                                borderSide:
+                                    BorderSide(color: colors.outlineVariant),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: _maxAmountCtrl,
+                            onChanged: (_) => setState(() {}),
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            inputFormatters: [
+                              FilteringTextInputFormatter.allow(
+                                RegExp(r'[\d.]'),
+                              ),
+                            ],
+                            decoration: InputDecoration(
+                              prefixText: '₹ ',
+                              labelText: 'Max',
+                              filled: true,
+                              fillColor: colors.surfaceContainerHighest,
+                              border: OutlineInputBorder(
+                                borderRadius: AppRadius.md,
+                                borderSide:
+                                    BorderSide(color: colors.outlineVariant),
+                              ),
+                              enabledBorder: OutlineInputBorder(
+                                borderRadius: AppRadius.md,
+                                borderSide:
+                                    BorderSide(color: colors.outlineVariant),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    if (_minAmountCtrl.text.isNotEmpty ||
+                        _maxAmountCtrl.text.isNotEmpty)
+                      Align(
+                        alignment: Alignment.centerRight,
+                        child: TextButton(
+                          onPressed: () => setState(() {
+                            _minAmountCtrl.clear();
+                            _maxAmountCtrl.clear();
+                          }),
+                          child: const Text('Clear amount range'),
+                        ),
+                      ),
                     const SizedBox(height: 24),
                     // ── Category section
                     Row(

@@ -20,21 +20,53 @@ final expenseDatasourceProvider = Provider<ExpenseLocalDatasource>(
 class ExpenseFilters {
   final Set<ExpenseCategory> categories; // empty = all
   final bool? incomeOnly; // null = both, true = income, false = expenses
+  final DateTime? dateFrom; // inclusive
+  final DateTime? dateTo; // inclusive
+  final double? minAmount;
+  final double? maxAmount;
 
-  const ExpenseFilters({this.categories = const {}, this.incomeOnly});
+  const ExpenseFilters({
+    this.categories = const {},
+    this.incomeOnly,
+    this.dateFrom,
+    this.dateTo,
+    this.minAmount,
+    this.maxAmount,
+  });
 
-  bool get isEmpty => categories.isEmpty && incomeOnly == null;
+  bool get _hasDateRange => dateFrom != null || dateTo != null;
+  bool get _hasAmountRange => minAmount != null || maxAmount != null;
+
+  bool get isEmpty =>
+      categories.isEmpty &&
+      incomeOnly == null &&
+      !_hasDateRange &&
+      !_hasAmountRange;
+
   int get activeCount =>
-      (categories.isEmpty ? 0 : 1) + (incomeOnly == null ? 0 : 1);
+      (categories.isEmpty ? 0 : 1) +
+      (incomeOnly == null ? 0 : 1) +
+      (_hasDateRange ? 1 : 0) +
+      (_hasAmountRange ? 1 : 0);
 
   ExpenseFilters copyWith({
     Set<ExpenseCategory>? categories,
     Object? incomeOnly = _sentinel, // use sentinel to allow explicit null
+    Object? dateFrom = _sentinel,
+    Object? dateTo = _sentinel,
+    Object? minAmount = _sentinel,
+    Object? maxAmount = _sentinel,
   }) =>
       ExpenseFilters(
         categories: categories ?? this.categories,
         incomeOnly:
             incomeOnly == _sentinel ? this.incomeOnly : incomeOnly as bool?,
+        dateFrom: dateFrom == _sentinel ? this.dateFrom : dateFrom as DateTime?,
+        dateTo: dateTo == _sentinel ? this.dateTo : dateTo as DateTime?,
+        minAmount:
+            minAmount == _sentinel ? this.minAmount : minAmount as double?,
+        maxAmount:
+            maxAmount == _sentinel ? this.maxAmount : maxAmount as double?,
       );
 
   static const _sentinel = Object();
@@ -92,10 +124,38 @@ class ExpenseState {
           .toList();
     }
 
-    // 2. Month slice
-    Iterable<Expense> result = expenses.where(
-      (e) => e.date.year == selectedYear && e.date.month == selectedMonth,
-    );
+    // 2. Date slice (explicit range overrides month slice)
+    Iterable<Expense> result = expenses;
+    if (activeFilters.dateFrom != null || activeFilters.dateTo != null) {
+      final from = activeFilters.dateFrom == null
+          ? null
+          : DateTime(
+              activeFilters.dateFrom!.year,
+              activeFilters.dateFrom!.month,
+              activeFilters.dateFrom!.day,
+            );
+      final to = activeFilters.dateTo == null
+          ? null
+          : DateTime(
+              activeFilters.dateTo!.year,
+              activeFilters.dateTo!.month,
+              activeFilters.dateTo!.day,
+              23,
+              59,
+              59,
+              999,
+            );
+
+      result = result.where((e) {
+        if (from != null && e.date.isBefore(from)) return false;
+        if (to != null && e.date.isAfter(to)) return false;
+        return true;
+      });
+    } else {
+      result = result.where(
+        (e) => e.date.year == selectedYear && e.date.month == selectedMonth,
+      );
+    }
 
     // 3. Apply active category filters
     if (activeFilters.categories.isNotEmpty) {
@@ -106,6 +166,14 @@ class ExpenseState {
     // 4. Apply income/expense filter
     if (activeFilters.incomeOnly != null) {
       result = result.where((e) => e.isIncome == activeFilters.incomeOnly);
+    }
+
+    // 5. Apply amount range
+    if (activeFilters.minAmount != null) {
+      result = result.where((e) => e.amount >= activeFilters.minAmount!);
+    }
+    if (activeFilters.maxAmount != null) {
+      result = result.where((e) => e.amount <= activeFilters.maxAmount!);
     }
 
     return result.toList();
@@ -374,6 +442,143 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
         }
       }
     }
+  }
+
+  Future<List<Expense>> findPotentialDuplicates({
+    required double amount,
+    required String description,
+    required DateTime date,
+    required bool isIncome,
+  }) async {
+    if (!_isOnline) return const [];
+
+    try {
+      final dio = _ref.read(dioProvider);
+      final response = await dio.post(
+        ApiEndpoints.expenseDuplicateCheck,
+        data: {
+          'amount': amount,
+          'description': description,
+          'date': date.toUtc().toIso8601String(),
+          'isIncome': isIncome,
+        },
+      );
+
+      final data = response.data is Map<String, dynamic>
+          ? response.data['data'] as Map<String, dynamic>?
+          : null;
+      final rawCandidates = (data?['candidates'] as List?) ?? const [];
+
+      return rawCandidates
+          .whereType<Map>()
+          .map((raw) => _mapServerExpense(raw.cast<String, dynamic>()))
+          .toList(growable: false);
+    } on DioException {
+      return const [];
+    }
+  }
+
+  Future<void> deleteExpensesBulk(List<String> ids) async {
+    final uniqueIds = ids.toSet().toList(growable: false);
+    if (uniqueIds.isEmpty) return;
+    final idSet = uniqueIds.toSet();
+
+    for (final id in uniqueIds) {
+      await _ds.delete(id);
+    }
+
+    if (!mounted) return;
+    state = state.copyWith(
+      expenses: state.expenses.where((e) => !idSet.contains(e.id)).toList(),
+    );
+
+    if (_isOnline && mounted) {
+      try {
+        final dio = _ref.read(dioProvider);
+        await dio.post(ApiEndpoints.expenseBatch, data: {
+          'action': 'delete',
+          'ids': uniqueIds,
+        });
+        if (!mounted) return;
+        for (final id in uniqueIds) {
+          await _ds.clearPendingDeletion(id);
+        }
+        if (mounted) {
+          state = state.copyWith(error: null);
+        }
+      } on DioException catch (e) {
+        if (mounted) {
+          state = state.copyWith(error: formatDioError(e));
+        }
+      }
+    }
+  }
+
+  Future<void> updateExpensesCategoryBulk({
+    required List<String> ids,
+    required ExpenseCategory category,
+  }) async {
+    final uniqueIds = ids.toSet().toList(growable: false);
+    if (uniqueIds.isEmpty) return;
+    final idSet = uniqueIds.toSet();
+    final now = DateTime.now();
+
+    final updatedExpenses = state.expenses
+        .map((expense) => idSet.contains(expense.id)
+            ? expense.copyWith(category: category, updatedAt: now)
+            : expense)
+        .toList(growable: false);
+
+    for (final expense in updatedExpenses.where((e) => idSet.contains(e.id))) {
+      await _ds.save(expense);
+    }
+
+    if (!mounted) return;
+    state = state.copyWith(expenses: updatedExpenses);
+
+    if (_isOnline && mounted) {
+      try {
+        final dio = _ref.read(dioProvider);
+        await dio.post(ApiEndpoints.expenseBatch, data: {
+          'action': 'updateCategory',
+          'ids': uniqueIds,
+          'category': category.name,
+        });
+        if (!mounted) return;
+        for (final id in uniqueIds) {
+          await _ds.clearPendingUpsert(id);
+        }
+        if (mounted) {
+          state = state.copyWith(error: null);
+        }
+      } on DioException catch (e) {
+        if (mounted) {
+          state = state.copyWith(error: formatDioError(e));
+        }
+      }
+    }
+  }
+
+  Expense _mapServerExpense(Map<String, dynamic> raw) {
+    return Expense.fromJson({
+      'id': raw['id'],
+      'amount': (raw['amount'] as num?)?.toDouble() ?? 0,
+      'description': raw['description'] as String? ?? '',
+      'category': raw['category'] as String? ?? ExpenseCategory.other.name,
+      'date': raw['date']?.toString() ?? DateTime.now().toIso8601String(),
+      'note': raw['notes'] ?? raw['note'],
+      'isIncome': raw['isIncome'] == true,
+      'isRecurring': raw['isRecurring'] == true,
+      'recurringFrequency': raw['recurringRule'] ?? raw['recurringFrequency'],
+      'recurringDueDay': (raw['recurringDueDay'] as num?)?.toInt(),
+      'receiptImageBase64': raw['receiptImageBase64'],
+      'receiptImageMimeType': raw['receiptImageMimeType'],
+      'receiptImageUrl': raw['receiptImageUrl'],
+      'receiptStorageKey': raw['receiptStorageKey'],
+      'receiptOcrText': raw['receiptOcrText'],
+      'updatedAt': (raw['updatedAt'] ?? raw['date'])?.toString() ??
+          DateTime.now().toIso8601String(),
+    });
   }
 
   void setSearch(String query) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_dialog.dart';
@@ -13,43 +14,50 @@ import '../providers/expense_provider.dart';
 
 class ExpenseListTile extends ConsumerWidget {
   final Expense expense;
+  final bool selectionMode;
+  final bool selected;
+  final ValueChanged<bool>? onSelectionChanged;
+  final VoidCallback? onLongPress;
 
-  const ExpenseListTile({super.key, required this.expense});
+  const ExpenseListTile({
+    super.key,
+    required this.expense,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelectionChanged,
+    this.onLongPress,
+  });
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
-    return Dismissible(
-      key: Key(expense.id),
-      direction: DismissDirection.endToStart,
-      background: Container(
-        alignment: Alignment.centerRight,
-        padding: EdgeInsets.only(right: R.s(20)),
-        color: AppColors.errorLight,
-        child: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
-      ),
-      confirmDismiss: (_) async {
-        return await DSConfirmDialog.show(
-          context: context,
-          title: 'Delete expense?',
-          message: 'Remove "${expense.description}" from your records?',
-          confirmLabel: 'Delete',
-          isDestructive: true,
-        );
-      },
-      onDismissed: (_) {
-        ref.read(expenseProvider.notifier).deleteExpense(expense.id);
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Expense deleted')));
-      },
+    final tile = Container(
+      color: selectionMode && selected
+          ? AppColors.primary.withValues(alpha: 0.06)
+          : Colors.transparent,
       child: Padding(
         padding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.s(12)),
         child: GestureDetector(
-          onTap: () => context.push(AppRoutes.expenseDetail, extra: expense),
+          onTap: () {
+            if (selectionMode) {
+              onSelectionChanged?.call(!selected);
+              return;
+            }
+            context.push(AppRoutes.expenseDetail, extra: expense);
+          },
+          onLongPress: onLongPress,
           behavior: HitTestBehavior.opaque,
           child: Row(
             children: [
+              if (selectionMode)
+                Padding(
+                  padding: EdgeInsets.only(right: R.xs),
+                  child: Checkbox(
+                    value: selected,
+                    onChanged: (value) =>
+                        onSelectionChanged?.call(value ?? false),
+                  ),
+                ),
               // Category icon
               Container(
                 width: 44,
@@ -146,6 +154,37 @@ class ExpenseListTile extends ConsumerWidget {
           ),
         ),
       ),
+    );
+
+    if (selectionMode) {
+      return tile;
+    }
+
+    return Dismissible(
+      key: Key(expense.id),
+      direction: DismissDirection.endToStart,
+      background: Container(
+        alignment: Alignment.centerRight,
+        padding: EdgeInsets.only(right: R.s(20)),
+        color: AppColors.errorLight,
+        child: const Icon(Icons.delete_outline_rounded, color: AppColors.error),
+      ),
+      confirmDismiss: (_) async {
+        return await DSConfirmDialog.show(
+          context: context,
+          title: 'Delete expense?',
+          message: 'Remove "${expense.description}" from your records?',
+          confirmLabel: 'Delete',
+          isDestructive: true,
+        );
+      },
+      onDismissed: (_) {
+        ref.read(expenseProvider.notifier).deleteExpense(expense.id);
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Expense deleted')));
+      },
+      child: tile,
     );
   }
 }

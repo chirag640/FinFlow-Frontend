@@ -116,6 +116,47 @@ class SyncConflictRecord {
   });
 }
 
+class SuggestionInteractionEvent {
+  final String flow;
+  final String eventType;
+  final bool isIncome;
+  final String? suggestionDescription;
+  final String? suggestionCategory;
+  final double? suggestionAmount;
+  final int? confidence;
+  final String? reason;
+  final String? inputDescription;
+  final DateTime createdAt;
+
+  const SuggestionInteractionEvent({
+    required this.flow,
+    required this.eventType,
+    required this.isIncome,
+    this.suggestionDescription,
+    this.suggestionCategory,
+    this.suggestionAmount,
+    this.confidence,
+    this.reason,
+    this.inputDescription,
+    required this.createdAt,
+  });
+
+  Map<String, dynamic> toJson() => {
+        'flow': flow,
+        'eventType': eventType,
+        'isIncome': isIncome,
+        if (suggestionDescription != null)
+          'suggestionDescription': suggestionDescription,
+        if (suggestionCategory != null)
+          'suggestionCategory': suggestionCategory,
+        if (suggestionAmount != null) 'suggestionAmount': suggestionAmount,
+        if (confidence != null) 'confidence': confidence,
+        if (reason != null) 'reason': reason,
+        if (inputDescription != null) 'inputDescription': inputDescription,
+        'createdAt': createdAt.toUtc().toIso8601String(),
+      };
+}
+
 class SyncCircuitStatus {
   final int consecutiveFullFailures;
   final int consecutivePullFailures;
@@ -230,6 +271,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
   static const _pullFailureThreshold = 5;
   static const _fullCircuitDuration = Duration(seconds: 45);
   static const _pullCircuitDuration = Duration(seconds: 30);
+  static const _maxSuggestionInteractions = 300;
 
   int _consecutiveFullFailures = 0;
   int _consecutivePullFailures = 0;
@@ -238,6 +280,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
   final List<int> _pushLatencySamples = [];
   final List<int> _pullLatencySamples = [];
   final List<int> _pullStalenessSamples = [];
+  final List<SuggestionInteractionEvent> _pendingSuggestionInteractions = [];
 
   // Must use the same Android options as auth_interceptor.dart and
   // cloud_auth_provider.dart — all three must read/write the same
@@ -404,7 +447,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
         budgetDs.getPendingUpserts().isNotEmpty ||
         budgetDs.getPendingDeletions().isNotEmpty ||
         goalDs.getPendingUpserts().isNotEmpty ||
-        goalDs.getPendingDeletions().isNotEmpty;
+        goalDs.getPendingDeletions().isNotEmpty ||
+        _pendingSuggestionInteractions.isNotEmpty;
   }
 
   int _currentQueueDepth() {
@@ -417,7 +461,59 @@ class SyncNotifier extends StateNotifier<SyncState> {
         budgetDs.getPendingUpserts().length +
         budgetDs.getPendingDeletions().length +
         goalDs.getPendingUpserts().length +
-        goalDs.getPendingDeletions().length;
+        goalDs.getPendingDeletions().length +
+        _pendingSuggestionInteractions.length;
+  }
+
+  void trackSuggestionInteraction({
+    required String flow,
+    required String eventType,
+    required bool isIncome,
+    String? suggestionDescription,
+    String? suggestionCategory,
+    double? suggestionAmount,
+    int? confidence,
+    String? reason,
+    String? inputDescription,
+  }) {
+    final normalizedEventType = eventType == 'ignored' ? 'ignored' : 'accepted';
+    final normalizedFlow = flow.trim();
+    if (normalizedFlow.isEmpty) return;
+
+    final event = SuggestionInteractionEvent(
+      flow: normalizedFlow.length > 48
+          ? normalizedFlow.substring(0, 48)
+          : normalizedFlow,
+      eventType: normalizedEventType,
+      isIncome: isIncome,
+      suggestionDescription: _trimNullable(suggestionDescription, 120),
+      suggestionCategory: _trimNullable(suggestionCategory, 64),
+      suggestionAmount: suggestionAmount,
+      confidence: confidence?.clamp(0, 100),
+      reason: _trimNullable(reason, 64),
+      inputDescription: _trimNullable(inputDescription, 120),
+      createdAt: DateTime.now().toUtc(),
+    );
+
+    _pendingSuggestionInteractions.add(event);
+    if (_pendingSuggestionInteractions.length > _maxSuggestionInteractions) {
+      _pendingSuggestionInteractions.removeRange(
+        0,
+        _pendingSuggestionInteractions.length - _maxSuggestionInteractions,
+      );
+    }
+
+    _updateMetrics(queueDepth: _currentQueueDepth());
+    scheduleSync(
+        reason: 'suggestion-feedback', delay: const Duration(seconds: 2));
+  }
+
+  String? _trimNullable(String? value, int maxLength) {
+    if (value == null) return null;
+    final trimmed = value.trim();
+    if (trimmed.isEmpty) return null;
+    if (trimmed.length <= maxLength) return trimmed;
+    return trimmed.substring(0, maxLength);
   }
 
   SyncConflictSummary getLocalConflictSummary() {
@@ -448,6 +544,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
       goalDs.clearAllPendingUpserts(),
       goalDs.clearAllPendingDeletions(),
     ]);
+    _pendingSuggestionInteractions.clear();
 
     _updateMetrics(queueDepth: 0);
     state = state.copyWith(error: null);
@@ -1296,11 +1393,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
           pendingBudgetUpsertsSet.length +
           pendingBudgetDeletesSet.length +
           pendingGoalUpsertsSet.length +
-          pendingGoalDeletesSet.length;
+          pendingGoalDeletesSet.length +
+          _pendingSuggestionInteractions.length;
       _updateMetrics(queueDepth: queueDepth);
 
       if (pushChanges) {
         final now = DateTime.now().toIso8601String();
+        final suggestionInteractionsToPush = _pendingSuggestionInteractions
+            .map((event) => event.toJson())
+            .toList(growable: false);
 
         final expenses = <Map<String, dynamic>>[];
         for (final id in expDs.getPendingUpserts()) {
@@ -1399,12 +1500,14 @@ class SyncNotifier extends StateNotifier<SyncState> {
           }
         }
 
-        final hasPayload =
-            expenses.isNotEmpty || budgets.isNotEmpty || goals.isNotEmpty;
+        final hasPayload = expenses.isNotEmpty ||
+            budgets.isNotEmpty ||
+            goals.isNotEmpty ||
+            suggestionInteractionsToPush.isNotEmpty;
 
         if (hasPayload) {
           debugPrint(
-              '[FinFlow Sync] 📤 Delta push: ${expenses.length} expenses, ${budgets.length} budgets, ${goals.length} goals');
+              '[FinFlow Sync] 📤 Delta push: ${expenses.length} expenses, ${budgets.length} budgets, ${goals.length} goals, ${suggestionInteractionsToPush.length} suggestion events');
           final pushRes = await dio.post(
             ApiEndpoints.syncPush,
             data: {
@@ -1412,6 +1515,8 @@ class SyncNotifier extends StateNotifier<SyncState> {
               if (expenses.isNotEmpty) 'expenses': expenses,
               if (budgets.isNotEmpty) 'budgets': budgets,
               if (goals.isNotEmpty) 'goals': goals,
+              if (suggestionInteractionsToPush.isNotEmpty)
+                'suggestionInteractions': suggestionInteractionsToPush,
             },
             options: Options(headers: {
               'x-sync-retry-count': _consecutiveFullFailures.toString(),
@@ -1435,13 +1540,22 @@ class SyncNotifier extends StateNotifier<SyncState> {
             goalDs,
             ack?['goals'] as Map<String, dynamic>?,
           );
+          if (suggestionInteractionsToPush.isNotEmpty) {
+            final removeCount = suggestionInteractionsToPush.length;
+            if (_pendingSuggestionInteractions.length <= removeCount) {
+              _pendingSuggestionInteractions.clear();
+            } else {
+              _pendingSuggestionInteractions.removeRange(0, removeCount);
+            }
+          }
 
           queueDepth = expDs.getPendingDeletions().length +
               expDs.getPendingUpserts().length +
               budgetDs.getPendingUpserts().length +
               budgetDs.getPendingDeletions().length +
               goalDs.getPendingUpserts().length +
-              goalDs.getPendingDeletions().length;
+              goalDs.getPendingDeletions().length +
+              _pendingSuggestionInteractions.length;
           _addSample(
             _pushLatencySamples,
             DateTime.now().difference(startedAt).inMilliseconds,

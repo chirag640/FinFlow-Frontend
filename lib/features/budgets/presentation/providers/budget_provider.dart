@@ -54,6 +54,8 @@ class BudgetState {
   double get totalAllocated =>
       envelopes.fold(0.0, (s, e) => s + e.effectiveAllocated);
   double get totalSpent => envelopes.fold(0.0, (s, e) => s + e.spentAmount);
+  int get overspentEnvelopesCount =>
+      envelopes.where((e) => e.isOverBudget).length;
 
   BudgetState copyWith({
     List<BudgetEnvelope>? envelopes,

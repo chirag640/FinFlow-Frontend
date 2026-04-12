@@ -20,6 +20,8 @@ abstract class ApiEndpoints {
 
   static const String expenses = '/expenses';
   static const String expenseSummary = '/expenses/summary';
+  static const String expenseDuplicateCheck = '/expenses/duplicates/check';
+  static const String expenseBatch = '/expenses/batch';
   static const String expenseReceiptUploadIntent =
       '/expenses/receipts/upload-intent';
   static const String expenseReceiptUpload = '/expenses/receipts/upload';
