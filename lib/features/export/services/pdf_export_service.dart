@@ -1,8 +1,10 @@
 import 'dart:io';
+
+import 'package:path_provider/path_provider.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
-import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../expenses/domain/entities/expense.dart';
 import '../../groups/domain/entities/group_expense.dart';
 import '../../groups/domain/entities/group_member.dart';
@@ -11,7 +13,7 @@ import '../domain/export_options.dart';
 /// Generates a formatted A4 PDF expense report and shares it via the OS
 /// share sheet. Uses built-in Helvetica — no custom fonts required.
 class PdfExportService {
-  static Future<void> exportExpenses({
+  static Future<File> exportExpenses({
     required List<Expense> expenses,
     required String fileName,
     required String fromLabel,
@@ -24,6 +26,8 @@ class PdfExportService {
     String organizationName = '',
     String organizationFooter = '',
     String executiveSignatory = '',
+    bool shareFile = true,
+    Directory? outputDirectory,
   }) async {
     final doc = pw.Document();
 
@@ -102,13 +106,16 @@ class PdfExportService {
     );
 
     final bytes = await doc.save();
-    final dir = await getTemporaryDirectory();
+    final dir = outputDirectory ?? await getTemporaryDirectory();
     final file = File('${dir.path}/$fileName.pdf');
     await file.writeAsBytes(bytes);
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: 'FinFlow — Expense Report  ($fromLabel → $toLabel)',
-    );
+    if (shareFile) {
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'FinFlow — Expense Report  ($fromLabel → $toLabel)',
+      );
+    }
+    return file;
   }
 
   static Future<void> exportGroupExpenses({

@@ -506,11 +506,14 @@ class CloudAuthNotifier extends StateNotifier<CloudAuthState> {
   }
 
   // ── Delete Account (DELETE /users/me) ────────────────────────────────────
-  Future<bool> deleteAccount() async {
+  Future<bool> deleteAccount({required String currentPassword}) async {
     state = state.copyWith(isLoading: true);
     try {
       await NotificationService.unregisterFcmToken(_dio);
-      await _dio.delete(ApiEndpoints.userProfile);
+      await _dio.delete(
+        ApiEndpoints.userProfile,
+        data: {'currentPassword': currentPassword},
+      );
     } on DioException catch (e) {
       // If 401/403 the token may already be invalid — proceed with local cleanup
       if (e.response?.statusCode != 401 && e.response?.statusCode != 403) {

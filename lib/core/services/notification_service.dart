@@ -60,6 +60,13 @@ class NotificationService {
     importance: Importance.high,
   );
 
+  static const _exportChannel = AndroidNotificationChannel(
+    'export_updates',
+    'Export Updates',
+    description: 'Updates for scheduled export generation.',
+    importance: Importance.defaultImportance,
+  );
+
   // ── Init ──────────────────────────────────────────────────────────────────
   static Future<void> init() async {
     if (_initialized) return;
@@ -82,6 +89,7 @@ class NotificationService {
     await androidPlugin?.createNotificationChannel(_goalsChannel);
     await androidPlugin?.createNotificationChannel(_recurringChannel);
     await androidPlugin?.createNotificationChannel(_groupChannel);
+    await androidPlugin?.createNotificationChannel(_exportChannel);
     await androidPlugin?.requestNotificationsPermission();
 
     _initialized = true;
@@ -217,6 +225,28 @@ class NotificationService {
     );
   }
 
+  static Future<void> showGroupBudgetWarning(
+    String groupName,
+    double pct,
+  ) async {
+    await _show(
+      id: (groupName.hashCode + 1100) & 0x7FFFFFFF,
+      title: '⚠️ Group Budget Alert — $groupName',
+      body:
+          '${(pct * 100).toStringAsFixed(0)}% of this month\'s group budget is used.',
+      channel: _budgetChannel,
+    );
+  }
+
+  static Future<void> showGroupBudgetOverLimit(String groupName) async {
+    await _show(
+      id: (groupName.hashCode + 1200) & 0x7FFFFFFF,
+      title: '🚨 Group Over Budget — $groupName',
+      body: 'This group has crossed its planned monthly budget.',
+      channel: _budgetChannel,
+    );
+  }
+
   // ── Recurring expense alerts ─────────────────────────────────────────────
   static Future<void> showRecurringDue(
       String description, double amount) async {
@@ -254,6 +284,19 @@ class NotificationService {
       body:
           "Congratulations! You've hit your savings target for \"$goalTitle\".",
       channel: _goalsChannel,
+    );
+  }
+
+  // ── Export updates ───────────────────────────────────────────────────────
+  static Future<void> showScheduledExportReady(
+    String scheduleName,
+    String formatLabel,
+  ) async {
+    await _show(
+      id: (scheduleName.hashCode + 7000) & 0x7FFFFFFF,
+      title: 'Scheduled export ready',
+      body: '$scheduleName ($formatLabel) has been generated.',
+      channel: _exportChannel,
     );
   }
 

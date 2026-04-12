@@ -28,8 +28,11 @@ import '../../features/groups/presentation/pages/add_group_expense_page.dart';
 import '../../features/groups/presentation/pages/create_group_page.dart';
 import '../../features/groups/presentation/pages/group_detail_page.dart';
 import '../../features/groups/presentation/pages/groups_page.dart';
+import '../../features/onboarding/presentation/pages/onboarding_walkthrough_page.dart';
 import '../../features/settings/presentation/pages/settings_page.dart';
+import '../../features/sync/presentation/pages/sync_conflict_resolution_page.dart';
 import '../../shared/widgets/adaptive_scaffold.dart';
+import '../providers/settings_provider.dart';
 
 // Route path constants
 abstract class AppRoutes {
@@ -40,6 +43,7 @@ abstract class AppRoutes {
   static const String login = '/cloud/login';
   static const String register = '/cloud/register';
   static const String verifyEmail = '/auth/verify-email';
+  static const String onboarding = '/onboarding';
   static const String dashboard = '/dashboard';
   static const String expenses = '/expenses';
   static const String addExpense = '/expenses/add';
@@ -58,6 +62,7 @@ abstract class AppRoutes {
   static const String expenseDetail = '/expenses/detail';
   static const String goals = '/goals';
   static const String aiInsights = '/ai-insights';
+  static const String syncConflicts = '/sync/conflicts';
 }
 
 final appRouterProvider = Provider<GoRouter>((ref) {
@@ -74,13 +79,21 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   });
   ref.onDispose(cloudNotifier.dispose);
 
+  final settingsNotifier =
+      ValueNotifier<SettingsState>(ref.read(settingsProvider));
+  ref.listen<SettingsState>(settingsProvider, (_, next) {
+    settingsNotifier.value = next;
+  });
+  ref.onDispose(settingsNotifier.dispose);
+
   return GoRouter(
     initialLocation: AppRoutes.authLanding,
-    refreshListenable: Listenable.merge([authNotifier, cloudNotifier]),
+    refreshListenable:
+        Listenable.merge([authNotifier, cloudNotifier, settingsNotifier]),
     redirect: (context, state) {
       final auth = authNotifier.value;
       final cloud = cloudNotifier.value;
-      final path = state.uri.toString();
+      final path = state.uri.path;
 
       // Don't redirect while initial load is running
       if (auth.isLoading) return null;
@@ -99,11 +112,22 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // State 2: Account exists, email not verified → verify-email
       if (auth.hasAccount && !auth.isEmailVerified) {
-        // Also check cloud state for pending verification
-        if (cloud.pendingVerificationUserId != null || !auth.isEmailVerified) {
+        final hasPendingVerification =
+            (cloud.pendingVerificationUserId ?? '').trim().isNotEmpty;
+        final isCloudEntryRoute = path == AppRoutes.authLanding ||
+            path == AppRoutes.login ||
+            path == AppRoutes.register;
+
+        // If we already have pending verification context, force OTP flow.
+        if (hasPendingVerification) {
           if (path == AppRoutes.verifyEmail) return null;
           return AppRoutes.verifyEmail;
         }
+
+        // If app was restarted before OTP completion, pending context can be
+        // absent. Let user re-enter cloud login/register to recover context.
+        if (isCloudEntryRoute || path == AppRoutes.verifyEmail) return null;
+        return AppRoutes.authLanding;
       }
 
       // State 3: Verified but no profile → profile-setup
@@ -133,11 +157,26 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 
       // State 6: Fully authenticated → dashboard (leave *auth flow* screens only)
       if (auth.isAuthenticated) {
+        final settings = settingsNotifier.value;
+
         // Cloud login/register are opt-in overlay screens — the user navigated
         // there deliberately from Settings to connect their cloud account.
         // Never redirect them away automatically.
         final isCloudOptIn = path.startsWith('/cloud/');
         if (isCloudOptIn) return null;
+
+        final shouldShowOnboarding =
+            settings.onboardingTipsEnabled && !settings.onboardingCompleted;
+        final isReplayOnboardingRoute = path == AppRoutes.onboarding &&
+            state.uri.queryParameters['replay'] == '1';
+
+        if (shouldShowOnboarding) {
+          if (path == AppRoutes.onboarding) return null;
+          return AppRoutes.onboarding;
+        }
+
+        if (isReplayOnboardingRoute) return null;
+        if (path == AppRoutes.onboarding) return AppRoutes.dashboard;
 
         final isAuthFlowScreen = path == AppRoutes.authLanding ||
             path == AppRoutes.pinEntry ||
@@ -193,6 +232,11 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.verifyEmail,
         pageBuilder: (context, state) =>
             _slideUp(key: state.pageKey, child: const VerifyEmailPage()),
+      ),
+      GoRoute(
+        path: AppRoutes.onboarding,
+        pageBuilder: (context, state) => _slideUp(
+            key: state.pageKey, child: const OnboardingWalkthroughPage()),
       ),
       // Main shell routes
       ShellRoute(
@@ -310,6 +354,13 @@ final appRouterProvider = Provider<GoRouter>((ref) {
         path: AppRoutes.aiInsights,
         pageBuilder: (context, state) =>
             _slideUp(key: state.pageKey, child: const AiInsightsPage()),
+      ),
+      GoRoute(
+        path: AppRoutes.syncConflicts,
+        pageBuilder: (context, state) => _slideUp(
+          key: state.pageKey,
+          child: const SyncConflictResolutionPage(),
+        ),
       ),
     ],
   );

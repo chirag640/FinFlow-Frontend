@@ -5,6 +5,7 @@ import 'package:uuid/uuid.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_button.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
@@ -77,6 +78,7 @@ class _AddBudgetPageState extends ConsumerState<AddBudgetPage> {
   Widget build(BuildContext context) {
     R.init(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final symbol = CurrencyFormatter.symbol();
     return Scaffold(
         backgroundColor: colorScheme.surfaceContainerLow,
         appBar: AppBar(
@@ -126,7 +128,7 @@ class _AddBudgetPageState extends ConsumerState<AddBudgetPage> {
                             color: AppColors.primary,
                           ),
                           decoration: InputDecoration(
-                            prefixText: '₹ ',
+                            prefixText: '$symbol ',
                             prefixStyle: TextStyle(
                               fontSize: R.t(36),
                               fontWeight: FontWeight.w800,

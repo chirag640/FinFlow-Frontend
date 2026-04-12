@@ -20,6 +20,9 @@ abstract class ApiEndpoints {
 
   static const String expenses = '/expenses';
   static const String expenseSummary = '/expenses/summary';
+  static const String expenseReceiptUploadIntent =
+      '/expenses/receipts/upload-intent';
+  static const String expenseReceiptUpload = '/expenses/receipts/upload';
   static String expense(String id) => '/expenses/$id';
 
   static const String groups = '/groups';
@@ -30,6 +33,12 @@ abstract class ApiEndpoints {
       '/groups/$groupId/expenses/$expId';
   static String groupSettlements(String id) => '/groups/$id/settlements';
   static String groupSettle(String id) => '/groups/$id/settle';
+  static String groupSettlementAudits(String id) =>
+      '/groups/$id/settlement-audits';
+  static String groupSettlementDispute(String groupId, String settlementId) =>
+      '/groups/$groupId/settlement-audits/$settlementId/dispute';
+  static String groupSettlementResolve(String groupId, String settlementId) =>
+      '/groups/$groupId/settlement-audits/$settlementId/resolve';
 
   static const String budgets = '/budgets';
   static String budget(String id) => '/budgets/$id';

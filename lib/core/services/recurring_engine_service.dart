@@ -32,7 +32,11 @@ abstract class RecurringEngineService {
       // If we already ran today for this template, skip
       if (last.isAtSameMomentAs(today)) continue;
 
-      final next = _nextDue(last, freq);
+      final next = _nextDue(
+        last,
+        freq,
+        monthlyDueDay: t.recurringDueDay,
+      );
       // Not due yet
       if (next.isAfter(today)) continue;
 
@@ -78,15 +82,26 @@ abstract class RecurringEngineService {
   }
 
   /// Computes the next theoretical due date after [last] based on [freq].
-  static DateTime _nextDue(DateTime last, RecurringFrequency freq) =>
+  static DateTime _nextDue(
+    DateTime last,
+    RecurringFrequency freq, {
+    int? monthlyDueDay,
+  }) =>
       switch (freq) {
         RecurringFrequency.daily => last.add(const Duration(days: 1)),
         RecurringFrequency.weekly => last.add(const Duration(days: 7)),
         RecurringFrequency.monthly =>
-          DateTime(last.year, last.month + 1, last.day),
+          _nextMonthlyDue(last, monthlyDueDay ?? last.day),
         RecurringFrequency.yearly =>
           DateTime(last.year + 1, last.month, last.day),
       };
+
+  static DateTime _nextMonthlyDue(DateTime last, int dueDay) {
+    final monthStart = DateTime(last.year, last.month + 1, 1);
+    final maxDay = DateTime(monthStart.year, monthStart.month + 1, 0).day;
+    final clampedDay = dueDay.clamp(1, maxDay);
+    return DateTime(monthStart.year, monthStart.month, clampedDay);
+  }
 
   /// Strips the time component so comparisons are purely date-based.
   static DateTime _dateOnly(DateTime dt) => DateTime(dt.year, dt.month, dt.day);
@@ -99,7 +114,7 @@ abstract class RecurringEngineService {
     final freq = template.recurringFrequency;
     if (freq == null) return template.date;
     final last = _lastGenerated(template.id) ?? _dateOnly(template.date);
-    return _nextDue(last, freq);
+    return _nextDue(last, freq, monthlyDueDay: template.recurringDueDay);
   }
 
   /// `true` when the template's next due date is today or in the past.

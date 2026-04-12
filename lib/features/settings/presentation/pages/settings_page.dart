@@ -9,6 +9,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_dialog.dart';
+import '../../../../core/providers/exchange_rate_provider.dart';
 import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/services/biometric_service.dart';
@@ -51,7 +52,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
     final cloud = ref.watch(cloudAuthProvider);
     final syncState = ref.watch(syncProvider);
+    final conflictSummary = ref.watch(syncConflictSummaryProvider);
     final settings = ref.watch(settingsProvider);
+    final exchangeRates = ref.watch(exchangeRateProvider);
+
+    final exchangeSubtitle = exchangeRates.updatedAt == null
+      ? 'Using cached rates'
+      : settings.currency == exchangeRates.baseCurrency
+        ? 'Base currency (${exchangeRates.baseCurrency})'
+        : '1 ${exchangeRates.baseCurrency} = ${exchangeRates.rateFor(settings.currency).toStringAsFixed(4)} ${settings.currency}';
 
     listenForProviderError(
       ref: ref,
@@ -63,7 +72,10 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       ref: ref,
       context: context,
       provider: syncProvider,
-      successSelector: (s) => s.isSyncing ? null : 'Data synced with cloud',
+      successSelector: (s) =>
+          (s.isSyncing || s.lastSyncTime == null || s.error != null)
+              ? null
+              : 'Data synced with cloud',
     );
 
     return Scaffold(
@@ -98,8 +110,9 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
             _QuickActionsRow(
               cloudConnected: cloud.isConnected,
               syncing: syncState.isSyncing,
-              onCloud: () => context
-                  .push(cloud.isConnected ? AppRoutes.login : AppRoutes.login),
+              onCloud: cloud.isConnected
+                  ? () => _showSessionManagerDialog(context, ref)
+                  : () => context.push(AppRoutes.login),
               onSync: syncState.isSyncing
                   ? null
                   : () => ref.read(syncProvider.notifier).sync(),
@@ -113,7 +126,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 if (cloud.isLoading) ...[
                   _SettingsTile(
                     icon: Icons.cloud_sync_rounded,
-                    iconColor: AppColors.textTertiary,
+                    iconColor: colors.onSurfaceVariant,
                     title: 'Verifying connection...',
                     subtitle: 'Checking your cloud session',
                     trailing: SizedBox.square(
@@ -135,7 +148,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                         : 'Connect to Cloud',
                     subtitle: cloud.error ?? 'Back up & sync across devices',
                     trailing: Icon(Icons.arrow_forward_ios_rounded,
-                        size: R.s(16), color: AppColors.textTertiary),
+                        size: R.s(16), color: colors.onSurfaceVariant),
                     onTap: () => context.push(AppRoutes.login),
                   ),
                   Divider(height: 1, indent: R.s(56)),
@@ -145,7 +158,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     title: 'Create Account',
                     subtitle: 'New user? Register for free',
                     trailing: Icon(Icons.arrow_forward_ios_rounded,
-                        size: R.s(16), color: AppColors.textTertiary),
+                        size: R.s(16), color: colors.onSurfaceVariant),
                     onTap: () => context.push(AppRoutes.register),
                   ),
                 ] else ...[
@@ -179,6 +192,21 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                     title: 'Manage Sessions',
                     subtitle: 'Review and revoke active devices',
                     onTap: () => _showSessionManagerDialog(context, ref),
+                  ),
+                  Divider(height: 1, indent: R.s(56)),
+                  _SettingsTile(
+                    icon: Icons.merge_type_rounded,
+                    iconColor: AppColors.warning,
+                    title: 'Resolve Sync Conflicts',
+                    subtitle: conflictSummary.hasConflicts
+                        ? '${conflictSummary.total} pending local changes'
+                        : 'No pending local conflicts',
+                    trailing: Icon(
+                      Icons.arrow_forward_ios_rounded,
+                      size: R.s(16),
+                      color: colors.onSurfaceVariant,
+                    ),
+                    onTap: () => context.push(AppRoutes.syncConflicts),
                   ),
                   Divider(height: 1, indent: R.s(56)),
                   _SettingsTile(
@@ -258,6 +286,69 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                       _showCurrencyPicker(context, ref, settings.currency),
                 ),
                 Divider(height: 1, indent: R.s(56)),
+                _SettingsTile(
+                  icon: Icons.swap_horiz_rounded,
+                  iconColor: AppColors.primary,
+                  title: 'Exchange Rates',
+                  subtitle: exchangeRates.error ?? exchangeSubtitle,
+                  trailing: exchangeRates.isLoading
+                      ? SizedBox.square(
+                          dimension: R.s(18),
+                          child: const CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: AppColors.primary,
+                          ),
+                        )
+                      : Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: R.s(16),
+                          color: colors.onSurfaceVariant,
+                        ),
+                  onTap: () => _showExchangeRateSheet(context),
+                ),
+                Divider(height: 1, indent: R.s(56)),
+                _SettingsTile(
+                  icon: Icons.visibility_off_outlined,
+                  iconColor: AppColors.warning,
+                  title: 'Privacy Mode',
+                  subtitle: 'Hide amounts across dashboards and lists',
+                  trailing: Switch.adaptive(
+                    value: settings.privacyModeEnabled,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (value) => ref
+                        .read(settingsProvider.notifier)
+                        .setPrivacyModeEnabled(value),
+                  ),
+                ),
+                Divider(height: 1, indent: R.s(56)),
+                _SettingsTile(
+                  icon: Icons.lightbulb_outline_rounded,
+                  iconColor: AppColors.warning,
+                  title: 'Onboarding Tips',
+                  subtitle: settings.onboardingTipsEnabled
+                      ? 'Walkthrough auto-open is enabled'
+                      : 'Walkthrough auto-open is disabled',
+                  trailing: Switch.adaptive(
+                    value: settings.onboardingTipsEnabled,
+                    activeThumbColor: AppColors.primary,
+                    onChanged: (value) => ref
+                        .read(settingsProvider.notifier)
+                        .setOnboardingTipsEnabled(value),
+                  ),
+                ),
+                Divider(height: 1, indent: R.s(56)),
+                _SettingsTile(
+                  icon: Icons.explore_outlined,
+                  iconColor: AppColors.accent,
+                  title: 'Replay Feature Walkthrough',
+                  subtitle: settings.onboardingCompleted
+                      ? 'Run the guided tour again'
+                      : 'Start the guided tour',
+                  trailing: Icon(Icons.arrow_forward_ios_rounded,
+                      size: R.s(16), color: colors.onSurfaceVariant),
+                  onTap: () => context.push('${AppRoutes.onboarding}?replay=1'),
+                ),
+                Divider(height: 1, indent: R.s(56)),
                 // _SettingsTile(
                 //   icon: Icons.view_compact_alt_outlined,
                 //   iconColor: AppColors.primary,
@@ -265,20 +356,6 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 //   subtitle: _densityLabel(settings.densityMode),
                 //   onTap: () =>
                 //       _showDensityPicker(context, ref, settings.densityMode),
-                // ),
-                // Divider(height: 1, indent: R.s(56)),
-                // _SettingsTile(
-                //   icon: Icons.lightbulb_outline_rounded,
-                //   iconColor: AppColors.warning,
-                //   title: 'Onboarding Tips',
-                //   subtitle: 'Show contextual guidance in key flows',
-                //   trailing: Switch.adaptive(
-                //     value: settings.onboardingTipsEnabled,
-                //     activeThumbColor: AppColors.primary,
-                //     onChanged: (v) => ref
-                //         .read(settingsProvider.notifier)
-                //         .setOnboardingTipsEnabled(v),
-                //   ),
                 // ),
               ]),
             ).animate().fadeIn(delay: 210.ms),
@@ -338,19 +415,19 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                 //       _showOrganizationBrandingDialog(context, ref, settings),
                 // ),
                 // Divider(height: 1, indent: R.s(56)),
-                const _SettingsTile(
+                _SettingsTile(
                   icon: Icons.info_outline_rounded,
-                  iconColor: AppColors.textSecondary,
+                  iconColor: colors.onSurfaceVariant,
                   title: 'Version',
                   subtitle: '1.0.0',
                 ),
                 Divider(height: 1, indent: R.s(56)),
                 _SettingsTile(
                   icon: Icons.privacy_tip_outlined,
-                  iconColor: AppColors.textSecondary,
+                  iconColor: colors.onSurfaceVariant,
                   title: 'Privacy Policy',
                   trailing: Icon(Icons.open_in_new_rounded,
-                      size: R.s(14), color: AppColors.textTertiary),
+                      size: R.s(14), color: colors.onSurfaceVariant),
                 ),
               ]),
             ).animate().fadeIn(delay: 270.ms),
@@ -383,6 +460,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _showThemePicker(
       BuildContext context, WidgetRef ref, ThemeMode current) async {
+    final colors = Theme.of(context).colorScheme;
     final options = [
       (ThemeMode.light, Icons.light_mode_outlined, 'Light'),
       (ThemeMode.dark, Icons.dark_mode_outlined, 'Dark'),
@@ -408,7 +486,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                   leading: Icon(icon,
                       color: current == mode
                           ? AppColors.primary
-                          : AppColors.textSecondary),
+                          : colors.onSurfaceVariant),
                   title: Text(label),
                   trailing: current == mode
                       ? const Icon(Icons.check_rounded,
@@ -429,6 +507,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
 
   Future<void> _showDensityPicker(
       BuildContext context, WidgetRef ref, UiDensityMode current) async {
+    final colors = Theme.of(context).colorScheme;
     await showModalBottomSheet(
       context: context,
       builder: (_) => SafeArea(
@@ -439,7 +518,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               leading: Icon(Icons.view_compact_alt_outlined,
                   color: current == UiDensityMode.compact
                       ? AppColors.primary
-                      : AppColors.textSecondary),
+                      : colors.onSurfaceVariant),
               title: const Text('Compact'),
               subtitle: const Text('More information on screen'),
               trailing: current == UiDensityMode.compact
@@ -456,7 +535,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               leading: Icon(Icons.space_dashboard_outlined,
                   color: current == UiDensityMode.comfortable
                       ? AppColors.primary
-                      : AppColors.textSecondary),
+                      : colors.onSurfaceVariant),
               title: const Text('Comfortable'),
               subtitle: const Text('Larger spacing and touch targets'),
               trailing: current == UiDensityMode.comfortable
@@ -703,6 +782,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   // ── Currency helpers ─────────────────────────────────────────────────────
   Future<void> _showCurrencyPicker(
       BuildContext context, WidgetRef ref, String current) async {
+    final colors = Theme.of(context).colorScheme;
     await showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -734,14 +814,14 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               fontSize: R.t(20), fontWeight: FontWeight.w600)),
                       title: Text(c.name),
                       subtitle: Text(c.code,
-                          style:
-                              const TextStyle(color: AppColors.textTertiary)),
+                          style: TextStyle(color: colors.onSurfaceVariant)),
                       trailing: isCurrent
                           ? const Icon(Icons.check_rounded,
                               color: AppColors.primary)
                           : null,
                       onTap: () {
                         ref.read(settingsProvider.notifier).setCurrency(c.code);
+                        ref.read(exchangeRateProvider.notifier).refreshIfStale();
                         // Fire-and-forget: patch server so currency survives
                         // re-login on other devices. Silent on failure — next
                         // sync pull will overwrite with server value anyway.
@@ -756,6 +836,149 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _showExchangeRateSheet(BuildContext context) async {
+    final colors = Theme.of(context).colorScheme;
+    await showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (_) => SafeArea(
+        child: Consumer(
+          builder: (context, ref, __) {
+            final state = ref.watch(exchangeRateProvider);
+            final settings = ref.watch(settingsProvider);
+            final selectedRate = state.rateFor(settings.currency);
+            final sample = state.convert(
+              1000,
+              fromCurrency: state.baseCurrency,
+              toCurrency: settings.currency,
+            );
+
+            return Padding(
+              padding: EdgeInsets.fromLTRB(R.md, R.md, R.md, R.lg),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Live Exchange Rates',
+                          style: TextStyle(
+                            fontSize: R.t(16),
+                            fontWeight: FontWeight.w800,
+                            color: colors.onSurface,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Refresh rates',
+                        onPressed: state.isLoading
+                            ? null
+                            : () => ref
+                                .read(exchangeRateProvider.notifier)
+                                .refreshRates(),
+                        icon: const Icon(Icons.refresh_rounded),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    state.updatedAt == null
+                        ? 'Using fallback/cached rates.'
+                        : 'Updated ${_formatTime(state.updatedAt!)}',
+                    style: TextStyle(
+                      fontSize: R.t(12),
+                      color: colors.onSurfaceVariant,
+                    ),
+                  ),
+                  SizedBox(height: R.s(12)),
+                  Container(
+                    width: double.infinity,
+                    padding: EdgeInsets.all(R.md),
+                    decoration: BoxDecoration(
+                      color: colors.primaryContainer,
+                      borderRadius: BorderRadius.circular(R.s(14)),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Base: ${state.baseCurrency}',
+                          style: TextStyle(
+                            fontSize: R.t(12),
+                            fontWeight: FontWeight.w700,
+                            color: colors.onPrimaryContainer,
+                          ),
+                        ),
+                        SizedBox(height: R.xs),
+                        Text(
+                          '1 ${state.baseCurrency} = ${selectedRate.toStringAsFixed(4)} ${settings.currency}',
+                          style: TextStyle(
+                            fontSize: R.t(14),
+                            fontWeight: FontWeight.w700,
+                            color: colors.onPrimaryContainer,
+                          ),
+                        ),
+                        SizedBox(height: R.xs),
+                        Text(
+                          '1000 ${state.baseCurrency} ≈ ${currencySymbol(settings.currency)}${sample.toStringAsFixed(2)}',
+                          style: TextStyle(
+                            fontSize: R.t(11),
+                            color: colors.onPrimaryContainer,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  SizedBox(height: R.s(12)),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(maxHeight: R.s(280)),
+                    child: ListView.separated(
+                      shrinkWrap: true,
+                      itemCount: kSupportedCurrencies.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final currency = kSupportedCurrencies[i];
+                        final rate = state.rateFor(currency.code);
+                        return ListTile(
+                          dense: true,
+                          title: Text('${currency.code} • ${currency.name}'),
+                          subtitle: Text(
+                            currency.code == state.baseCurrency
+                                ? 'Base currency'
+                                : '1 ${state.baseCurrency} = ${rate.toStringAsFixed(4)} ${currency.code}',
+                          ),
+                          trailing: Text(
+                            currency.symbol,
+                            style: TextStyle(
+                              fontSize: R.t(16),
+                              fontWeight: FontWeight.w700,
+                              color: colors.onSurface,
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                  if (state.error != null) ...[
+                    SizedBox(height: R.sm),
+                    Text(
+                      state.error!,
+                      style: TextStyle(
+                        fontSize: R.t(11),
+                        color: AppColors.error,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            );
+          },
         ),
       ),
     );
@@ -923,8 +1146,15 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       confirmLabel: 'Delete',
       isDestructive: true,
     );
+    if (!context.mounted) return;
+
     if (confirmed == true) {
-      final ok = await ref.read(cloudAuthProvider.notifier).deleteAccount();
+      final currentPassword = await _promptCurrentPasswordForDelete(context);
+      if (currentPassword == null) return;
+
+      final ok = await ref.read(cloudAuthProvider.notifier).deleteAccount(
+            currentPassword: currentPassword,
+          );
       if (ok) {
         await ref.read(authStateProvider.notifier).logout();
         _resetLocalState(ref);
@@ -933,6 +1163,98 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
         }
       }
     }
+  }
+
+  Future<String?> _promptCurrentPasswordForDelete(BuildContext context) async {
+    final controller = TextEditingController();
+    bool obscureText = true;
+    String? validationError;
+    String? value;
+
+    await showDialog<void>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogCtx) => StatefulBuilder(
+        builder: (dialogCtx, setDialogState) => DSDialog(
+          title: const Text('Confirm your password'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'For security, enter your account password before deletion.',
+              ),
+              const Gap(12),
+              TextField(
+                controller: controller,
+                obscureText: obscureText,
+                autofocus: true,
+                textInputAction: TextInputAction.done,
+                onSubmitted: (_) {
+                  final password = controller.text;
+                  if (password.trim().length < 8) {
+                    setDialogState(
+                      () => validationError =
+                          'Enter your current password (min 8 chars)',
+                    );
+                    return;
+                  }
+                  value = password;
+                  Navigator.pop(dialogCtx);
+                },
+                decoration: InputDecoration(
+                  labelText: 'Current password',
+                  prefixIcon: const Icon(Icons.lock_outline_rounded),
+                  suffixIcon: IconButton(
+                    onPressed: () =>
+                        setDialogState(() => obscureText = !obscureText),
+                    icon: Icon(
+                      obscureText
+                          ? Icons.visibility_outlined
+                          : Icons.visibility_off_outlined,
+                    ),
+                  ),
+                ),
+              ),
+              if (validationError != null) ...[
+                const Gap(8),
+                Text(
+                  validationError!,
+                  style: const TextStyle(color: AppColors.error, fontSize: 12),
+                ),
+              ],
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogCtx),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () {
+                final password = controller.text;
+                if (password.trim().length < 8) {
+                  setDialogState(
+                    () => validationError =
+                        'Enter your current password (min 8 chars)',
+                  );
+                  return;
+                }
+                value = password;
+                Navigator.pop(dialogCtx);
+              },
+              child: const Text(
+                'Continue',
+                style: TextStyle(color: AppColors.error),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    controller.dispose();
+    return value;
   }
 
   Future<void> _confirmRemovePin(BuildContext context, WidgetRef ref) async {
@@ -1264,6 +1586,7 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return DSDialog(
       title: const Text('Active Sessions'),
       content: SizedBox(
@@ -1283,7 +1606,7 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
                     children: [
                       Text(
                         '${_sessions.length} active device${_sessions.length == 1 ? '' : 's'}',
-                        style: const TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: colors.onSurfaceVariant),
                       ),
                       const Spacer(),
                       IconButton(
@@ -1308,11 +1631,11 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
                       ),
                     ),
                   if (_sessions.isEmpty)
-                    const Padding(
+                    Padding(
                       padding: EdgeInsets.symmetric(vertical: 24),
                       child: Text(
                         'No active sessions found.',
-                        style: TextStyle(color: AppColors.textSecondary),
+                        style: TextStyle(color: colors.onSurfaceVariant),
                       ),
                     ),
                   if (_sessions.isNotEmpty)
@@ -1335,8 +1658,8 @@ class _SessionManagerDialogState extends ConsumerState<_SessionManagerDialog> {
                             title: Text(_displayDeviceName(s)),
                             subtitle: Text(
                               subtitle,
-                              style: const TextStyle(
-                                color: AppColors.textSecondary,
+                              style: TextStyle(
+                                color: colors.onSurfaceVariant,
                                 fontSize: 12,
                               ),
                             ),

@@ -15,6 +15,8 @@ class AuthLandingPage extends StatelessWidget {
   Widget build(BuildContext context) {
     R.init(context);
     final colorScheme = Theme.of(context).colorScheme;
+    final textPrimary = colorScheme.onSurface;
+    final textSecondary = colorScheme.onSurfaceVariant;
     return Scaffold(
       backgroundColor: colorScheme.surface,
       body: SafeArea(
@@ -57,7 +59,7 @@ class AuthLandingPage extends StatelessWidget {
                     style: TextStyle(
                       fontSize: R.t(42),
                       fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+                      color: textPrimary,
                       letterSpacing: -1.5,
                       height: 1.1,
                     ),
@@ -73,7 +75,7 @@ class AuthLandingPage extends StatelessWidget {
                     style: TextStyle(
                       fontSize: R.t(20),
                       fontWeight: FontWeight.w400,
-                      color: AppColors.textSecondary,
+                      color: textSecondary,
                       height: 1.4,
                     ),
                   )
@@ -113,8 +115,7 @@ class AuthLandingPage extends StatelessWidget {
                         text: TextSpan(
                           text: 'Already have an account? ',
                           style: TextStyle(
-                              fontSize: R.t(13),
-                              color: AppColors.textSecondary),
+                              fontSize: R.t(13), color: textSecondary),
                           children: const [
                             TextSpan(
                               text: 'Sign in',
@@ -134,7 +135,7 @@ class AuthLandingPage extends StatelessWidget {
                       'Your data is encrypted and synced securely.',
                       textAlign: TextAlign.center,
                       style: TextStyle(
-                          fontSize: R.t(12), color: AppColors.textTertiary),
+                          fontSize: R.t(12), color: colorScheme.outline),
                     ),
                   ).animate(delay: 750.ms).fadeIn(duration: 400.ms),
                   SizedBox(height: R.md),
@@ -155,19 +156,20 @@ class _FeaturePill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     R.init(context);
+    final colors = Theme.of(context).colorScheme;
     return Container(
       padding: EdgeInsets.symmetric(horizontal: R.sm + R.xs, vertical: R.s(7)),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.surfaceContainerHighest,
+        color: colors.surfaceContainerHighest,
         borderRadius: AppRadius.fullAll,
-        border: Border.all(color: AppColors.border),
+        border: Border.all(color: colors.outlineVariant),
       ),
       child: Text(
         label,
         style: TextStyle(
           fontSize: R.t(13),
           fontWeight: FontWeight.w500,
-          color: AppColors.textSecondary,
+          color: colors.onSurfaceVariant,
         ),
       ),
     );

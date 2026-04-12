@@ -1,15 +1,19 @@
 import 'dart:io';
+
 import 'package:csv/csv.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
+
 import '../../expenses/domain/entities/expense.dart';
 import '../domain/export_options.dart';
 
 class CsvExportService {
-  static Future<void> exportExpenses({
+  static Future<File> exportExpenses({
     required List<Expense> expenses,
     required String fileName,
     ExportOptions options = const ExportOptions(),
+    bool shareFile = true,
+    Directory? outputDirectory,
   }) async {
     final rows = <List<dynamic>>[];
     const header = [
@@ -57,11 +61,16 @@ class CsvExportService {
     }
 
     final csv = const ListToCsvConverter().convert(rows);
-    final dir = await getTemporaryDirectory();
+    final dir = outputDirectory ?? await getTemporaryDirectory();
     final file = File('${dir.path}/$fileName.csv');
     await file.writeAsString(csv);
-    await Share.shareXFiles([XFile(file.path)],
-        text: 'FinFlow — Expense Export');
+    if (shareFile) {
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: 'FinFlow — Expense Export',
+      );
+    }
+    return file;
   }
 
   static String _groupKey(Expense e, ExportGrouping grouping) {

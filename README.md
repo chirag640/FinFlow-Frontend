@@ -13,6 +13,7 @@ FinFlow Frontend is a Flutter application for personal finance management, with 
 ## App Capabilities
 
 - Cloud authentication with access and refresh token flow
+- First-run onboarding walkthrough with settings-based replay
 - Expense tracking with category and recurring support
 - Budget planning and spending visibility
 - Group expenses and settlement support
@@ -108,6 +109,22 @@ flutter build ios --release
 - Secure tokens are stored with Flutter Secure Storage.
 - API calls go through the shared Dio provider and auth interceptor.
 - Error formatting and request trace IDs are surfaced for debugging.
+- Hive startup now applies schema marker migration via `HiveService.migrateStorageSchema()`.
+- If Hive startup detects corruption, local cache repair is attempted and an in-app repair banner is shown.
+- Settings now includes Privacy Mode (amount masking) and Sync Conflict Resolution center (`/sync/conflicts`).
+- Shell now exposes a quick Privacy Mode toggle; app switcher is masked in privacy mode and Android screenshots are blocked with secure flag.
+- Sync circuit-breaker UX is visible in shell banner (full sync opens after 3 failures for 45s, pull-only opens after 5 failures for 30s).
+- Group detail now includes a settlement audit timeline with dispute submission and owner-only dispute resolution actions.
+- Authenticated first-run now opens a guided onboarding walkthrough (`/onboarding`), and Settings can replay it.
+- Investments feature scaffolds were removed from active frontend scope until product requirements are finalized.
+
+Storage migration and corruption recovery strategy:
+
+- `../docs/HIVE_MIGRATION_CORRUPTION_RECOVERY.md`
+
+Design system reference:
+
+- `../docs/DESIGN_SYSTEM.md`
 
 ## AI-Assisted Development Workflow
 
@@ -128,6 +145,24 @@ For environment sanity checks:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File ../tools/ai/check-dev-environment.ps1
+```
+
+For one-command local bootstrap (dependencies, optional Docker services, optional validation):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ../tools/ai/bootstrap-local-dev.ps1 -Validate
+```
+
+To launch backend + frontend in separate terminals from this repo:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ../tools/ai/start-local-stack.ps1
+```
+
+To stop local Docker services when done:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File ../tools/ai/stop-local-stack.ps1
 ```
 
 ## Troubleshooting

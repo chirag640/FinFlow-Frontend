@@ -18,9 +18,13 @@ import '../../../../core/router/app_router.dart';
 import '../../../../core/ui/error_feedback.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
+import '../../../auth/presentation/providers/cloud_auth_provider.dart';
 import '../../../export/services/pdf_export_service.dart';
 import '../../domain/entities/group.dart';
 import '../../domain/entities/group_expense.dart';
+import '../../domain/entities/group_member.dart';
+import '../../domain/entities/group_settlement_audit.dart';
+import '../providers/group_budget_provider.dart';
 import '../providers/group_provider.dart';
 import '../widgets/debt_summary_widget.dart';
 
@@ -43,14 +47,24 @@ class GroupDetailPage extends ConsumerWidget {
       provider: groupExpenseProvider(groupId),
       errorSelector: (s) => s.error,
     );
+    listenForProviderError<GroupSettlementAuditState>(
+      ref: ref,
+      context: context,
+      provider: groupSettlementAuditProvider(groupId),
+      errorSelector: (s) => s.error,
+    );
     final groupState = ref.watch(groupProvider);
     final expState = ref.watch(groupExpenseProvider(groupId));
+    final settlementState = ref.watch(groupSettlementAuditProvider(groupId));
+    final groupBudgetState = ref.watch(groupBudgetProvider);
+    final cloudUserId = ref.watch(cloudAuthProvider).user?.id;
     final group = groupState.groups.firstWhere(
       (g) => g.id == groupId,
       orElse: () => Group(
         id: groupId,
         name: 'Group',
         emoji: '👥',
+        ownerId: '',
         members: [],
         currentUserId: '',
         createdAt: DateTime.now(),
@@ -59,6 +73,17 @@ class GroupDetailPage extends ConsumerWidget {
 
     final balances = expState.netBalances(group.currentUserId);
     final settlements = simplifyDebts(balances);
+    final now = DateTime.now();
+    final monthlySpend = _monthlySpend(expState.expenses, now);
+    final activeBudgetPlan = groupBudgetState.planFor(groupId, now);
+    final leaderboard =
+        _buildLeaderboardEntries(group.members, expState.expenses, now);
+    final challengeProgress = _buildChallengeProgress(
+      entries: leaderboard,
+      monthExpenseCount: _monthlyExpenseCount(expState.expenses, now),
+      monthlyBudget: activeBudgetPlan?.monthlyBudget,
+      monthlySpend: monthlySpend,
+    );
     final totalSpent = expState.expenses.fold<double>(
       0,
       (sum, expense) => sum + expense.amount,
@@ -66,7 +91,19 @@ class GroupDetailPage extends ConsumerWidget {
     final myGetBack = expState.myTotalOwing(group.currentUserId);
     final myOwe = expState.myTotalOwed(group.currentUserId);
     final myNet = myGetBack - myOwe;
+    final isGroupOwner = cloudUserId != null && cloudUserId == group.ownerId;
     final colorScheme = Theme.of(context).colorScheme;
+
+    ref.listen<GroupExpenseState>(groupExpenseProvider(groupId), (prev, next) {
+      final spend = _monthlySpend(next.expenses, DateTime.now());
+      unawaited(
+        ref.read(groupBudgetProvider.notifier).evaluateBudgetAlerts(
+              groupId: groupId,
+              groupName: group.name,
+              monthlySpend: spend,
+            ),
+      );
+    });
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -192,6 +229,27 @@ class GroupDetailPage extends ConsumerWidget {
                       myNet: myNet,
                     ),
                     SizedBox(height: R.s(16)),
+                    _GroupBudgetPlannerCard(
+                      groupName: group.name,
+                      monthlySpend: monthlySpend,
+                      budgetPlan: activeBudgetPlan,
+                      onSetBudget: () => _showGroupBudgetPlanDialog(
+                        context,
+                        ref,
+                        groupId: group.id,
+                        existingPlan: activeBudgetPlan,
+                      ),
+                      onClearBudget: activeBudgetPlan == null
+                          ? null
+                          : () => ref
+                              .read(groupBudgetProvider.notifier)
+                              .clearPlan(group.id),
+                    ),
+                    SizedBox(height: R.s(16)),
+                    _GroupLeaderboardSection(entries: leaderboard),
+                    SizedBox(height: R.s(16)),
+                    _GroupChallengesSection(progress: challengeProgress),
+                    SizedBox(height: R.s(16)),
                     if (settlements.isNotEmpty) ...[
                       DebtSummaryWidget(
                         settlements: settlements,
@@ -201,6 +259,19 @@ class GroupDetailPage extends ConsumerWidget {
                       ),
                       SizedBox(height: R.s(20)),
                     ],
+                    _SettlementAuditSection(
+                      group: group,
+                      state: settlementState,
+                      isGroupOwner: isGroupOwner,
+                      onRefresh: () => ref
+                          .read(groupSettlementAuditProvider(groupId).notifier)
+                          .refresh(),
+                      onDispute: (audit) =>
+                          _showDisputeDialog(context, ref, audit),
+                      onResolve: (audit) =>
+                          _showResolveDialog(context, ref, audit),
+                    ),
+                    SizedBox(height: R.s(20)),
                     Text(
                       'TRANSACTIONS',
                       style: TextStyle(
@@ -401,6 +472,304 @@ class GroupDetailPage extends ConsumerWidget {
       ),
     );
   }
+
+  double _monthlySpend(List<GroupExpense> expenses, DateTime monthRef) {
+    return expenses
+        .where(
+          (e) =>
+              e.date.month == monthRef.month &&
+              e.date.year == monthRef.year &&
+              !e.isSettlement,
+        )
+        .fold(0.0, (sum, e) => sum + e.amount);
+  }
+
+  int _monthlyExpenseCount(List<GroupExpense> expenses, DateTime monthRef) {
+    return expenses
+        .where(
+          (e) =>
+              e.date.month == monthRef.month &&
+              e.date.year == monthRef.year &&
+              !e.isSettlement,
+        )
+        .length;
+  }
+
+  List<_MemberLeaderboardEntry> _buildLeaderboardEntries(
+    List<GroupMember> members,
+    List<GroupExpense> expenses,
+    DateTime monthRef,
+  ) {
+    final paidBy = <String, double>{};
+    final owedBy = <String, double>{};
+
+    for (final expense in expenses) {
+      if (expense.isSettlement) continue;
+      if (expense.date.month != monthRef.month ||
+          expense.date.year != monthRef.year) {
+        continue;
+      }
+
+      paidBy[expense.paidByMemberId] =
+          (paidBy[expense.paidByMemberId] ?? 0) + expense.amount;
+      for (final share in expense.shares) {
+        owedBy[share.memberId] = (owedBy[share.memberId] ?? 0) + share.amount;
+      }
+    }
+
+    final entries = members.map((member) {
+      return _MemberLeaderboardEntry(
+        member: member,
+        paid: paidBy[member.id] ?? 0,
+        owed: owedBy[member.id] ?? 0,
+      );
+    }).toList();
+
+    entries.sort((a, b) => b.net.compareTo(a.net));
+    return entries;
+  }
+
+  _GroupChallengeProgress _buildChallengeProgress({
+    required List<_MemberLeaderboardEntry> entries,
+    required int monthExpenseCount,
+    required double? monthlyBudget,
+    required double monthlySpend,
+  }) {
+    final totalMembers = entries.length;
+    final settledMembers = entries.where((e) => e.net.abs() <= 50).length;
+    final settlementProgress =
+        totalMembers == 0 ? 0.0 : settledMembers / totalMembers;
+
+    final expenseLoggingProgress = (monthExpenseCount / 8).clamp(0.0, 1.0);
+
+    final budgetProgress = (() {
+      if (monthlyBudget == null || monthlyBudget <= 0) return 0.0;
+      final remainingRatio = (monthlyBudget - monthlySpend) / monthlyBudget;
+      return remainingRatio.clamp(0.0, 1.0);
+    })();
+
+    return _GroupChallengeProgress(
+      settlementProgress: settlementProgress,
+      expenseLoggingProgress: expenseLoggingProgress,
+      budgetGuardProgress: budgetProgress,
+      monthlyBudget: monthlyBudget,
+      monthlySpend: monthlySpend,
+      monthExpenseCount: monthExpenseCount,
+      settledMembers: settledMembers,
+      totalMembers: totalMembers,
+    );
+  }
+
+  Future<void> _showGroupBudgetPlanDialog(
+    BuildContext context,
+    WidgetRef ref, {
+    required String groupId,
+    required GroupBudgetPlan? existingPlan,
+  }) async {
+    final current = existingPlan?.monthlyBudget;
+    final symbol = CurrencyFormatter.symbol();
+    final ctrl = TextEditingController(
+      text: current != null && current > 0 ? current.toStringAsFixed(0) : '',
+    );
+
+    final shouldSave = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Set Group Monthly Budget'),
+        content: TextField(
+          controller: ctrl,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: InputDecoration(
+            labelText: 'Budget amount',
+            hintText: 'Enter amount',
+            prefixText: '$symbol ',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Save'),
+          ),
+        ],
+      ),
+    );
+
+    final rawAmount = ctrl.text.trim();
+    ctrl.dispose();
+
+    if (shouldSave != true) return;
+
+    final parsed = double.tryParse(rawAmount);
+    if (parsed == null || parsed <= 0) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Enter a valid positive amount.')),
+        );
+      }
+      return;
+    }
+
+    await ref.read(groupBudgetProvider.notifier).setMonthlyBudget(
+          groupId: groupId,
+          monthlyBudget: parsed,
+        );
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Group budget updated.')),
+    );
+  }
+
+  Future<void> _showDisputeDialog(
+    BuildContext context,
+    WidgetRef ref,
+    GroupSettlementAudit audit,
+  ) async {
+    final reasonCtrl = TextEditingController();
+    final noteCtrl = TextEditingController();
+
+    final shouldSubmit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Dispute settlement'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: reasonCtrl,
+                maxLength: 240,
+                decoration: const InputDecoration(
+                  labelText: 'Reason *',
+                  hintText: 'Explain what looks incorrect',
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: noteCtrl,
+                maxLength: 500,
+                minLines: 2,
+                maxLines: 4,
+                decoration: const InputDecoration(
+                  labelText: 'Note (optional)',
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Submit dispute'),
+          ),
+        ],
+      ),
+    );
+
+    final reason = reasonCtrl.text.trim();
+    final note = noteCtrl.text.trim();
+    reasonCtrl.dispose();
+    noteCtrl.dispose();
+
+    if (shouldSubmit != true) return;
+    if (reason.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Dispute reason is required.')),
+        );
+      }
+      return;
+    }
+
+    try {
+      await ref
+          .read(groupSettlementAuditProvider(groupId).notifier)
+          .submitDispute(
+            settlementExpenseId: audit.settlementExpenseId,
+            reason: reason,
+            note: note,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settlement marked as disputed.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_cleanExceptionMessage(e))),
+      );
+    }
+  }
+
+  Future<void> _showResolveDialog(
+    BuildContext context,
+    WidgetRef ref,
+    GroupSettlementAudit audit,
+  ) async {
+    final noteCtrl = TextEditingController();
+    final shouldSubmit = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Resolve dispute'),
+        content: TextField(
+          controller: noteCtrl,
+          maxLength: 500,
+          minLines: 2,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'Resolution note (optional)',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('Resolve'),
+          ),
+        ],
+      ),
+    );
+
+    final resolutionNote = noteCtrl.text.trim();
+    noteCtrl.dispose();
+    if (shouldSubmit != true) return;
+
+    try {
+      await ref
+          .read(groupSettlementAuditProvider(groupId).notifier)
+          .resolveDispute(
+            settlementExpenseId: audit.settlementExpenseId,
+            resolutionNote: resolutionNote,
+          );
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Settlement dispute resolved.')),
+      );
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(_cleanExceptionMessage(e))),
+      );
+    }
+  }
+
+  String _cleanExceptionMessage(Object error) {
+    final raw = error.toString();
+    if (raw.startsWith('Exception: ')) {
+      return raw.substring('Exception: '.length);
+    }
+    return raw;
+  }
 }
 
 class _StatRow extends StatelessWidget {
@@ -595,6 +964,660 @@ class _AmountBadge extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _MemberLeaderboardEntry {
+  final GroupMember member;
+  final double paid;
+  final double owed;
+
+  const _MemberLeaderboardEntry({
+    required this.member,
+    required this.paid,
+    required this.owed,
+  });
+
+  double get net => paid - owed;
+}
+
+class _GroupChallengeProgress {
+  final double settlementProgress;
+  final double expenseLoggingProgress;
+  final double budgetGuardProgress;
+  final double? monthlyBudget;
+  final double monthlySpend;
+  final int monthExpenseCount;
+  final int settledMembers;
+  final int totalMembers;
+
+  const _GroupChallengeProgress({
+    required this.settlementProgress,
+    required this.expenseLoggingProgress,
+    required this.budgetGuardProgress,
+    required this.monthlyBudget,
+    required this.monthlySpend,
+    required this.monthExpenseCount,
+    required this.settledMembers,
+    required this.totalMembers,
+  });
+}
+
+class _GroupBudgetPlannerCard extends StatelessWidget {
+  final String groupName;
+  final double monthlySpend;
+  final GroupBudgetPlan? budgetPlan;
+  final VoidCallback onSetBudget;
+  final VoidCallback? onClearBudget;
+
+  const _GroupBudgetPlannerCard({
+    required this.groupName,
+    required this.monthlySpend,
+    required this.budgetPlan,
+    required this.onSetBudget,
+    required this.onClearBudget,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final hasPlan = budgetPlan != null && budgetPlan!.monthlyBudget > 0;
+    final planAmount = budgetPlan?.monthlyBudget ?? 0;
+    final ratio = hasPlan ? (monthlySpend / planAmount).clamp(0.0, 1.4) : 0.0;
+
+    Color meterColor;
+    if (ratio >= 1) {
+      meterColor = colorScheme.error;
+    } else if (ratio >= 0.8) {
+      meterColor = AppColors.warning;
+    } else {
+      meterColor = AppColors.success;
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'GROUP BUDGET PLANNER',
+                style: TextStyle(
+                  fontSize: R.t(11),
+                  fontWeight: FontWeight.w700,
+                  color: colorScheme.onSurfaceVariant,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              TextButton.icon(
+                onPressed: onSetBudget,
+                icon: const Icon(Icons.edit_rounded),
+                label: Text(hasPlan ? 'Edit' : 'Set'),
+              ),
+              if (onClearBudget != null)
+                TextButton(
+                  onPressed: onClearBudget,
+                  child: const Text('Clear'),
+                ),
+            ],
+          ),
+          Text(
+            hasPlan
+                ? 'Track $groupName against a monthly cap'
+                : 'Set a monthly group budget to unlock progress and alert nudges.',
+            style: TextStyle(
+              fontSize: R.t(12),
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (hasPlan) ...[
+            SizedBox(height: R.s(12)),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    'Spent: ${CurrencyFormatter.format(monthlySpend)}',
+                    style: TextStyle(
+                      fontSize: R.t(12),
+                      fontWeight: FontWeight.w700,
+                      color: colorScheme.onSurface,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Budget: ${CurrencyFormatter.format(planAmount)}',
+                  style: TextStyle(
+                    fontSize: R.t(12),
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+              ],
+            ),
+            SizedBox(height: R.xs),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(R.s(10)),
+              child: LinearProgressIndicator(
+                value: ratio > 1 ? 1 : ratio,
+                minHeight: R.s(8),
+                backgroundColor: colorScheme.surfaceContainerHighest,
+                valueColor: AlwaysStoppedAnimation<Color>(meterColor),
+              ),
+            ),
+            SizedBox(height: R.xs),
+            Text(
+              ratio >= 1
+                  ? 'Budget exceeded by ${CurrencyFormatter.format(monthlySpend - planAmount)}'
+                  : '${(ratio * 100).toStringAsFixed(0)}% of monthly budget used',
+              style: TextStyle(
+                fontSize: R.t(11),
+                color: ratio >= 1 ? colorScheme.error : colorScheme.onSurface,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupLeaderboardSection extends StatelessWidget {
+  final List<_MemberLeaderboardEntry> entries;
+
+  const _GroupLeaderboardSection({required this.entries});
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'LEADERBOARD',
+            style: TextStyle(
+              fontSize: R.t(11),
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurfaceVariant,
+              letterSpacing: 1.2,
+            ),
+          ),
+          SizedBox(height: R.s(8)),
+          if (entries.isEmpty)
+            Text(
+              'No leaderboard data for this month yet.',
+              style: TextStyle(
+                fontSize: R.t(12),
+                color: colorScheme.onSurfaceVariant,
+              ),
+            )
+          else
+            ...entries.take(5).toList().asMap().entries.map((entry) {
+              final rank = entry.key + 1;
+              final row = entry.value;
+              final net = row.net;
+              final netColor =
+                  net >= 0 ? AppColors.success : colorScheme.error;
+              return Padding(
+                padding: EdgeInsets.only(bottom: R.xs),
+                child: Row(
+                  children: [
+                    Container(
+                      width: R.s(24),
+                      height: R.s(24),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: colorScheme.surfaceContainerHighest,
+                        borderRadius: BorderRadius.circular(R.s(8)),
+                      ),
+                      child: Text(
+                        '$rank',
+                        style: TextStyle(
+                          fontSize: R.t(11),
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                    SizedBox(width: R.s(10)),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            row.member.handle,
+                            style: TextStyle(
+                              fontSize: R.t(12),
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                          Text(
+                            'Paid ${CurrencyFormatter.format(row.paid)} · Share ${CurrencyFormatter.format(row.owed)}',
+                            style: TextStyle(
+                              fontSize: R.t(10),
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Text(
+                      '${net >= 0 ? '+' : '-'}${CurrencyFormatter.format(net.abs())}',
+                      style: TextStyle(
+                        fontSize: R.t(12),
+                        fontWeight: FontWeight.w800,
+                        color: netColor,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+        ],
+      ),
+    );
+  }
+}
+
+class _GroupChallengesSection extends StatelessWidget {
+  final _GroupChallengeProgress progress;
+
+  const _GroupChallengesSection({required this.progress});
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'SOCIAL CHALLENGES',
+            style: TextStyle(
+              fontSize: R.t(11),
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurfaceVariant,
+              letterSpacing: 1.2,
+            ),
+          ),
+          SizedBox(height: R.s(8)),
+          _ChallengeTile(
+            icon: Icons.check_circle_outline_rounded,
+            title: 'Settle-Up Sprint',
+            subtitle:
+                '${progress.settledMembers}/${progress.totalMembers} members near-zero balance',
+            progress: progress.settlementProgress,
+          ),
+          _ChallengeTile(
+            icon: Icons.list_alt_rounded,
+            title: '8 Expense Logs',
+            subtitle: '${progress.monthExpenseCount}/8 shared expenses logged',
+            progress: progress.expenseLoggingProgress,
+          ),
+          _ChallengeTile(
+            icon: Icons.shield_outlined,
+            title: 'Budget Guard',
+            subtitle: progress.monthlyBudget == null
+                ? 'Set a group budget to track this challenge'
+                : 'Spend ${CurrencyFormatter.format(progress.monthlySpend)} of ${CurrencyFormatter.format(progress.monthlyBudget!)}',
+            progress: progress.monthlyBudget == null
+                ? 0
+                : progress.budgetGuardProgress,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ChallengeTile extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String subtitle;
+  final double progress;
+
+  const _ChallengeTile({
+    required this.icon,
+    required this.title,
+    required this.subtitle,
+    required this.progress,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final pct = (progress * 100).clamp(0.0, 100.0);
+    return Padding(
+      padding: EdgeInsets.only(bottom: R.s(10)),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: EdgeInsets.all(R.s(8)),
+            decoration: BoxDecoration(
+              color: colorScheme.primaryContainer,
+              borderRadius: BorderRadius.circular(R.s(10)),
+            ),
+            child: Icon(icon, size: R.s(16), color: colorScheme.primary),
+          ),
+          SizedBox(width: R.s(10)),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: R.t(12),
+                    fontWeight: FontWeight.w700,
+                    color: colorScheme.onSurface,
+                  ),
+                ),
+                SizedBox(height: R.xs),
+                Text(
+                  subtitle,
+                  style: TextStyle(
+                    fontSize: R.t(10),
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                SizedBox(height: R.xs),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(R.s(999)),
+                  child: LinearProgressIndicator(
+                    value: pct / 100,
+                    minHeight: R.s(6),
+                    backgroundColor: colorScheme.surfaceContainerHighest,
+                    valueColor:
+                        AlwaysStoppedAnimation<Color>(colorScheme.primary),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(width: R.s(8)),
+          Text(
+            '${pct.toStringAsFixed(0)}%',
+            style: TextStyle(
+              fontSize: R.t(11),
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurface,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _SettlementAuditSection extends StatelessWidget {
+  const _SettlementAuditSection({
+    required this.group,
+    required this.state,
+    required this.isGroupOwner,
+    required this.onRefresh,
+    required this.onDispute,
+    required this.onResolve,
+  });
+
+  final Group group;
+  final GroupSettlementAuditState state;
+  final bool isGroupOwner;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function(GroupSettlementAudit audit) onDispute;
+  final Future<void> Function(GroupSettlementAudit audit) onResolve;
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(
+                'SETTLEMENT AUDIT',
+                style: TextStyle(
+                  fontSize: R.t(11),
+                  fontWeight: FontWeight.w700,
+                  color: colorScheme.onSurfaceVariant,
+                  letterSpacing: 1.2,
+                ),
+              ),
+              const Spacer(),
+              IconButton(
+                tooltip: 'Refresh settlement audits',
+                onPressed: state.isLoading ? null : onRefresh,
+                icon: const Icon(Icons.refresh_rounded),
+              ),
+            ],
+          ),
+          SizedBox(height: R.s(8)),
+          if (state.isLoading && state.audits.isEmpty)
+            const Center(
+              child: Padding(
+                padding: EdgeInsets.all(10),
+                child: CircularProgressIndicator(),
+              ),
+            )
+          else if (state.audits.isEmpty)
+            Text(
+              'No settlement audit entries yet.',
+              style: TextStyle(
+                fontSize: R.t(12),
+                color: colorScheme.onSurfaceVariant,
+              ),
+            )
+          else
+            Column(
+              children: state.audits.map((audit) {
+                final fromHandle = _memberHandle(group, audit.fromMemberId);
+                final toHandle = _memberHandle(group, audit.toMemberId);
+                final dispute = audit.dispute;
+
+                return Container(
+                  margin: EdgeInsets.only(bottom: R.s(10)),
+                  padding: EdgeInsets.all(R.s(10)),
+                  decoration: BoxDecoration(
+                    color: colorScheme.surfaceContainerHighest
+                        .withValues(alpha: 0.35),
+                    borderRadius: BorderRadius.circular(R.s(10)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '$fromHandle → $toHandle',
+                              style: TextStyle(
+                                fontSize: R.t(13),
+                                fontWeight: FontWeight.w700,
+                                color: colorScheme.onSurface,
+                              ),
+                            ),
+                          ),
+                          _SettlementStatusChip(audit: audit),
+                        ],
+                      ),
+                      SizedBox(height: R.s(4)),
+                      Text(
+                        '${CurrencyFormatter.format(audit.amount)} · ${audit.settledAt.toLocal()}',
+                        style: TextStyle(
+                          fontSize: R.t(11),
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                      ),
+                      if (dispute != null) ...[
+                        SizedBox(height: R.s(8)),
+                        Text(
+                          'Dispute reason: ${dispute.reason}',
+                          style: TextStyle(
+                            fontSize: R.t(11),
+                            fontWeight: FontWeight.w600,
+                            color: colorScheme.onSurface,
+                          ),
+                        ),
+                        if (dispute.note != null &&
+                            dispute.note!.trim().isNotEmpty)
+                          Padding(
+                            padding: EdgeInsets.only(top: R.s(2)),
+                            child: Text(
+                              'Note: ${dispute.note}',
+                              style: TextStyle(
+                                fontSize: R.t(11),
+                                color: colorScheme.onSurfaceVariant,
+                              ),
+                            ),
+                          ),
+                        if (dispute.resolutionNote != null &&
+                            dispute.resolutionNote!.trim().isNotEmpty)
+                          Padding(
+                            padding: EdgeInsets.only(top: R.s(2)),
+                            child: Text(
+                              'Resolution: ${dispute.resolutionNote}',
+                              style: TextStyle(
+                                fontSize: R.t(11),
+                                color: colorScheme.tertiary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                      ],
+                      SizedBox(height: R.s(8)),
+                      Wrap(
+                        spacing: R.s(8),
+                        runSpacing: R.s(8),
+                        children: [
+                          if (!audit.isResolved && !audit.isDisputed)
+                            OutlinedButton.icon(
+                              onPressed: state.isSubmitting
+                                  ? null
+                                  : () => onDispute(audit),
+                              icon: const Icon(Icons.report_problem_outlined),
+                              label: const Text('Dispute'),
+                            ),
+                          if (audit.isDisputed && isGroupOwner)
+                            FilledButton.icon(
+                              onPressed: state.isSubmitting
+                                  ? null
+                                  : () => onResolve(audit),
+                              icon: const Icon(Icons.verified_rounded),
+                              label: const Text('Resolve as owner'),
+                            ),
+                          if (audit.isDisputed && !isGroupOwner)
+                            Text(
+                              'Awaiting owner resolution',
+                              style: TextStyle(
+                                fontSize: R.t(11),
+                                color: colorScheme.onSurfaceVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+        ],
+      ),
+    );
+  }
+
+  String _memberHandle(Group group, String memberId) {
+    for (final member in group.members) {
+      if (member.id == memberId) {
+        return member.handle;
+      }
+    }
+    return memberId;
+  }
+}
+
+class _SettlementStatusChip extends StatelessWidget {
+  const _SettlementStatusChip({required this.audit});
+
+  final GroupSettlementAudit audit;
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+
+    Color bg;
+    Color fg;
+    String label;
+
+    if (audit.isResolved) {
+      bg = colorScheme.tertiaryContainer;
+      fg = colorScheme.tertiary;
+      label = 'Resolved';
+    } else if (audit.isDisputed) {
+      bg = colorScheme.errorContainer;
+      fg = colorScheme.error;
+      label = 'Disputed';
+    } else {
+      bg = colorScheme.primaryContainer;
+      fg = colorScheme.primary;
+      label = 'Recorded';
+    }
+
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: R.s(8), vertical: R.s(4)),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(R.s(999)),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: R.t(10),
+          fontWeight: FontWeight.w700,
+          color: fg,
+        ),
       ),
     );
   }

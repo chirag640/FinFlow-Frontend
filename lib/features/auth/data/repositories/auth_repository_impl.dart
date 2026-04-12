@@ -1,4 +1,5 @@
-﻿import 'dart:convert';
+﻿import 'dart:async';
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:crypto/crypto.dart';
@@ -129,114 +130,79 @@ class AuthRepository {
 
   /// Verify a PIN entered by the user.
   ///
-  /// Uses server verification when available and falls back to local secure
-  /// storage only for resilient offline unlock behavior.
+  /// Offline-first behavior:
+  /// - If a local PIN hash exists, validate locally and return immediately.
+  /// - If no local PIN hash exists, fall back to server verification.
+  ///
+  /// A background reconciliation request is dispatched when possible so server
+  /// lockout metadata can still converge without blocking the unlock screen.
   Future<PinVerificationResult> verifyPin(String pin, {Ref? ref}) async {
     final sanitizedPin = pin.trim();
+    final localResult = await _verifyPinLocally(sanitizedPin);
 
-    if (ref != null) {
-      try {
-        final dio = ref.read(dioProvider);
-
-        final hasLocalPin = await hasPin;
-        final options = hasLocalPin
-            ? Options(
-                connectTimeout: const Duration(seconds: 6),
-                sendTimeout: const Duration(seconds: 8),
-                receiveTimeout: const Duration(seconds: 8),
-              )
-            : Options(
-                connectTimeout: const Duration(seconds: 8),
-                sendTimeout: const Duration(seconds: 12),
-                receiveTimeout: const Duration(seconds: 20),
-              );
-
-        final res = await dio.post(
-          ApiEndpoints.verifyPin,
-          data: {'pin': sanitizedPin},
-          options: options,
-        );
-
-        return _parseServerPinVerification(res.data);
-      } on DioException catch (e) {
-        if (!_isTransientNetworkFailure(e)) {
-          if (e.response?.statusCode == 401) {
-            return const PinVerificationResult(
-              outcome: PinVerificationOutcome.unavailable,
-              message: 'Session expired. Please sign in again.',
-            );
-          }
-          return const PinVerificationResult(
-            outcome: PinVerificationOutcome.invalid,
-            message: 'PIN verification failed. Please try again.',
-          );
-        }
-
-        final localResult = await _verifyPinLocally(sanitizedPin);
-        if (localResult == true) {
-          return const PinVerificationResult(
-            outcome: PinVerificationOutcome.valid,
-            usedLocalFallback: true,
-          );
-        }
-
-        if (localResult == null) {
-          return const PinVerificationResult(
-            outcome: PinVerificationOutcome.unavailable,
-            message:
-                'Unable to verify PIN right now. Check your connection and try again.',
-          );
-        }
-
+    if (localResult != null) {
+      _reconcilePinVerificationInBackground(sanitizedPin, ref);
+      if (localResult) {
         return const PinVerificationResult(
-          outcome: PinVerificationOutcome.unavailable,
-          message:
-              'Could not reach server to confirm PIN. Please try again in a moment.',
-          usedLocalFallback: true,
-        );
-      } catch (_) {
-        final localResult = await _verifyPinLocally(sanitizedPin);
-        if (localResult == true) {
-          return const PinVerificationResult(
-            outcome: PinVerificationOutcome.valid,
-            usedLocalFallback: true,
-          );
-        }
-        if (localResult == null) {
-          return const PinVerificationResult(
-            outcome: PinVerificationOutcome.unavailable,
-            message:
-                'Unable to verify PIN right now. Check your connection and try again.',
-          );
-        }
-        return const PinVerificationResult(
-          outcome: PinVerificationOutcome.invalid,
-          message: 'Incorrect PIN.',
+          outcome: PinVerificationOutcome.valid,
           usedLocalFallback: true,
         );
       }
-    }
 
-    final localResult = await _verifyPinLocally(sanitizedPin);
-    if (localResult == true) {
       return const PinVerificationResult(
-        outcome: PinVerificationOutcome.valid,
+        outcome: PinVerificationOutcome.invalid,
+        message: 'Incorrect PIN.',
         usedLocalFallback: true,
       );
     }
 
-    if (localResult == null) {
+    if (ref == null) {
       return const PinVerificationResult(
         outcome: PinVerificationOutcome.notConfigured,
         message: 'No PIN configured for this account.',
       );
     }
 
-    return const PinVerificationResult(
-      outcome: PinVerificationOutcome.invalid,
-      message: 'Incorrect PIN.',
-      usedLocalFallback: true,
-    );
+    try {
+      final dio = ref.read(dioProvider);
+      final res = await dio.post(
+        ApiEndpoints.verifyPin,
+        data: {'pin': sanitizedPin},
+        options: Options(
+          connectTimeout: const Duration(seconds: 8),
+          sendTimeout: const Duration(seconds: 12),
+          receiveTimeout: const Duration(seconds: 20),
+        ),
+      );
+
+      return _parseServerPinVerification(res.data);
+    } on DioException catch (e) {
+      if (e.response?.statusCode == 401) {
+        return const PinVerificationResult(
+          outcome: PinVerificationOutcome.unavailable,
+          message: 'Session expired. Please sign in again.',
+        );
+      }
+
+      if (_isTransientNetworkFailure(e)) {
+        return const PinVerificationResult(
+          outcome: PinVerificationOutcome.unavailable,
+          message:
+              'Unable to verify PIN right now. Check your connection and try again.',
+        );
+      }
+
+      return const PinVerificationResult(
+        outcome: PinVerificationOutcome.invalid,
+        message: 'PIN verification failed. Please try again.',
+      );
+    } catch (_) {
+      return const PinVerificationResult(
+        outcome: PinVerificationOutcome.unavailable,
+        message:
+            'Unable to verify PIN right now. Check your connection and try again.',
+      );
+    }
   }
 
   /// Store a PIN hash received from the server (no re-hashing).
@@ -326,6 +292,29 @@ class AuthRepository {
     }
 
     return _sha256(pin) == stored;
+  }
+
+  void _reconcilePinVerificationInBackground(String pin, Ref? ref) {
+    if (ref == null) return;
+
+    final dio = ref.read(dioProvider);
+    unawaited(
+      () async {
+        try {
+          await dio.post(
+            ApiEndpoints.verifyPin,
+            data: {'pin': pin},
+            options: Options(
+              connectTimeout: const Duration(seconds: 3),
+              sendTimeout: const Duration(seconds: 3),
+              receiveTimeout: const Duration(seconds: 3),
+            ),
+          );
+        } catch (_) {
+          // Best-effort only.
+        }
+      }(),
+    );
   }
 
   bool _isTransientNetworkFailure(DioException e) {

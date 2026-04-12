@@ -1,9 +1,12 @@
 // Figma: Screen/ExpenseDetail
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:share_plus/share_plus.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_dialog.dart';
@@ -36,6 +39,11 @@ class ExpenseDetailPage extends ConsumerWidget {
               color: colorScheme.onSurface),
         ),
         actions: [
+          IconButton(
+            icon: const Icon(Icons.ios_share_rounded, color: AppColors.accent),
+            onPressed: () => _openQuickSplitShare(context),
+            tooltip: 'Quick split share',
+          ),
           IconButton(
             icon: const Icon(Icons.edit_outlined, color: AppColors.primary),
             onPressed: () =>
@@ -80,6 +88,25 @@ class ExpenseDetailPage extends ConsumerWidget {
                   .fadeIn(duration: 300.ms),
             ],
 
+            if ((expense.receiptImageBase64 != null &&
+                    expense.receiptImageBase64!.isNotEmpty) ||
+                (expense.receiptImageUrl != null &&
+                    expense.receiptImageUrl!.isNotEmpty)) ...[
+              SizedBox(height: R.md),
+              _ReceiptImageCard(
+                receiptImageBase64: expense.receiptImageBase64,
+                receiptImageUrl: expense.receiptImageUrl,
+              ).animate(delay: 170.ms).fadeIn(duration: 300.ms),
+            ],
+
+            if (expense.receiptOcrText != null &&
+                expense.receiptOcrText!.isNotEmpty) ...[
+              SizedBox(height: R.md),
+              _ReceiptOcrCard(receiptOcrText: expense.receiptOcrText!)
+                  .animate(delay: 200.ms)
+                  .fadeIn(duration: 300.ms),
+            ],
+
             SizedBox(height: R.xl),
 
             // Delete CTA at bottom
@@ -119,6 +146,122 @@ class ExpenseDetailPage extends ConsumerWidget {
         context.pop();
       }
     });
+  }
+
+  void _openQuickSplitShare(BuildContext context) {
+    int participants = 2;
+    final noteController = TextEditingController();
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final perPerson = expense.amount / participants;
+            return Padding(
+              padding: EdgeInsets.fromLTRB(
+                R.s(20),
+                R.s(18),
+                R.s(20),
+                MediaQuery.of(sheetContext).viewInsets.bottom + R.s(20),
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Quick Split Share',
+                    style: TextStyle(
+                      fontSize: R.t(18),
+                      fontWeight: FontWeight.w800,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                  SizedBox(height: R.s(6)),
+                  Text(
+                    'Share this expense without creating a group.',
+                    style: TextStyle(
+                      fontSize: R.t(12),
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  SizedBox(height: R.md),
+                  Text(
+                    '$participants people · ${CurrencyFormatter.format(perPerson)} each',
+                    style: TextStyle(
+                      fontSize: R.t(13),
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.primary,
+                    ),
+                  ),
+                  Slider(
+                    value: participants.toDouble(),
+                    min: 2,
+                    max: 20,
+                    divisions: 18,
+                    label: '$participants',
+                    onChanged: (value) {
+                      setSheetState(() => participants = value.round());
+                    },
+                  ),
+                  TextField(
+                    controller: noteController,
+                    maxLength: 120,
+                    decoration: const InputDecoration(
+                      labelText: 'Optional note',
+                      hintText: 'e.g. UPI me by tonight',
+                    ),
+                  ),
+                  SizedBox(height: R.sm),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        final note = noteController.text.trim();
+                        await _shareQuickSplit(participants, note);
+                        if (sheetContext.mounted) {
+                          Navigator.of(sheetContext).pop();
+                        }
+                      },
+                      icon: const Icon(Icons.ios_share_rounded),
+                      label: const Text('Share Split'),
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    ).whenComplete(noteController.dispose);
+  }
+
+  Future<void> _shareQuickSplit(int participants, String note) async {
+    final total = CurrencyFormatter.format(expense.amount);
+    final perPerson = CurrencyFormatter.format(expense.amount / participants);
+    final dateText = DateFormat('d MMM yyyy').format(expense.date);
+
+    final message = StringBuffer()
+      ..writeln('FinFlow Quick Split')
+      ..writeln('${expense.category.emoji} ${expense.description}')
+      ..writeln('Date: $dateText')
+      ..writeln('Total: $total')
+      ..writeln('Split: $participants people · $perPerson each');
+
+    if (note.isNotEmpty) {
+      message
+        ..writeln()
+        ..writeln('Note: $note');
+    }
+
+    await Share.share(
+      message.toString(),
+      subject: 'Split request: ${expense.description}',
+    );
   }
 }
 
@@ -350,6 +493,126 @@ class _NoteCard extends StatelessWidget {
                         fontSize: R.t(14), color: AppColors.textPrimary)),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReceiptImageCard extends StatelessWidget {
+  final String? receiptImageBase64;
+  final String? receiptImageUrl;
+
+  const _ReceiptImageCard({this.receiptImageBase64, this.receiptImageUrl});
+
+  Widget _buildFallback() {
+    return const Center(
+      child: Icon(
+        Icons.broken_image_outlined,
+        color: AppColors.textTertiary,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final hasBase64 =
+        receiptImageBase64 != null && receiptImageBase64!.isNotEmpty;
+    final hasUrl = receiptImageUrl != null && receiptImageUrl!.isNotEmpty;
+
+    if (!hasBase64 && !hasUrl) {
+      return const SizedBox.shrink();
+    }
+
+    Widget image;
+    if (hasBase64) {
+      try {
+        image = Image.memory(
+          base64Decode(receiptImageBase64!),
+          width: double.infinity,
+          height: R.s(220),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildFallback(),
+        );
+      } catch (_) {
+        image = _buildFallback();
+      }
+    } else {
+      image = Image.network(
+        receiptImageUrl!,
+        width: double.infinity,
+        height: R.s(220),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => _buildFallback(),
+      );
+    }
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receipt',
+            style: TextStyle(
+              fontSize: R.t(12),
+              fontWeight: FontWeight.w700,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          SizedBox(height: R.sm),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(R.s(10)),
+            child: image,
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _ReceiptOcrCard extends StatelessWidget {
+  final String receiptOcrText;
+  const _ReceiptOcrCard({required this.receiptOcrText});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: AppColors.success.withValues(alpha: 0.08),
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: AppColors.success.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Receipt OCR',
+            style: TextStyle(
+              fontSize: R.t(12),
+              fontWeight: FontWeight.w700,
+              color: AppColors.success,
+            ),
+          ),
+          SizedBox(height: R.xs),
+          Text(
+            receiptOcrText,
+            style: TextStyle(
+              fontSize: R.t(13),
+              color: AppColors.textPrimary,
+              height: 1.4,
+            ),
+            maxLines: 8,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),

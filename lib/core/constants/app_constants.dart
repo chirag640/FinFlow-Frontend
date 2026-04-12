@@ -39,6 +39,20 @@ abstract class AppConstants {
   static const String hasProfileKey = 'ff_has_profile';
   static const String hasPinKey = 'ff_has_pin';
 
+  // Local storage schema tracking
+  static const String storageSchemaVersionKey = 'ff_storage_schema_version';
+  static const String storageSchemaUpdatedAtKey =
+      'ff_storage_schema_updated_at';
+  static const int storageSchemaVersion = 1;
+
+  // Local cache repair notice (set when Hive recovery path is triggered)
+  static const String cacheRepairNoticeActiveKey =
+      'ff_cache_repair_notice_active';
+  static const String cacheRepairNoticeMessageKey =
+      'ff_cache_repair_notice_message';
+  static const String cacheRepairNoticeUpdatedAtKey =
+      'ff_cache_repair_notice_updated_at';
+
   // Legacy (kept for migration)
   static const String hasOnboardedKey = 'ff_has_onboarded';
 }

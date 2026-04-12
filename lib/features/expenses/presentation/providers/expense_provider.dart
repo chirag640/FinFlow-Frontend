@@ -189,6 +189,12 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     required ExpenseCategory category,
     required DateTime date,
     String? note,
+    int? recurringDueDay,
+    String? receiptImageBase64,
+    String? receiptImageMimeType,
+    String? receiptImageUrl,
+    String? receiptStorageKey,
+    String? receiptOcrText,
     bool isIncome = false,
     bool isRecurring = false,
     RecurringFrequency? recurringFrequency,
@@ -200,6 +206,12 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
       category: category,
       date: date,
       note: note,
+      recurringDueDay: recurringDueDay,
+      receiptImageBase64: receiptImageBase64,
+      receiptImageMimeType: receiptImageMimeType,
+      receiptImageUrl: receiptImageUrl,
+      receiptStorageKey: receiptStorageKey,
+      receiptOcrText: receiptOcrText,
       isIncome: isIncome,
       isRecurring: isRecurring,
       recurringFrequency: recurringFrequency,
@@ -212,6 +224,9 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
     if (_isOnline && mounted) {
       try {
         final dio = _ref.read(dioProvider);
+        final hasExternalReceiptRef =
+            (receiptImageUrl != null && receiptImageUrl.isNotEmpty) ||
+                (receiptStorageKey != null && receiptStorageKey.isNotEmpty);
         await dio.post(ApiEndpoints.expenses, data: {
           'id': expense
               .id, // client UUID — server uses it as _id (no duplicates on sync)
@@ -220,8 +235,16 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
           'category': category.name,
           'date': date.toIso8601String(),
           if (note != null) 'notes': note,
+          if (!hasExternalReceiptRef && receiptImageBase64 != null)
+            'receiptImageBase64': receiptImageBase64,
+          if (receiptImageMimeType != null)
+            'receiptImageMimeType': receiptImageMimeType,
+          if (receiptImageUrl != null) 'receiptImageUrl': receiptImageUrl,
+          if (receiptStorageKey != null) 'receiptStorageKey': receiptStorageKey,
+          if (receiptOcrText != null) 'receiptOcrText': receiptOcrText,
           'isIncome': isIncome,
           'isRecurring': isRecurring,
+          'recurringDueDay': recurringDueDay,
           if (recurringFrequency != null)
             'recurringRule': recurringFrequency.name,
         });
@@ -325,10 +348,20 @@ class ExpenseNotifier extends StateNotifier<ExpenseState> {
           'category': localUpdated.category.name,
           'date': localUpdated.date.toIso8601String(),
           'notes': localUpdated.note,
+          'receiptImageBase64': localUpdated.receiptImageBase64,
+          'receiptImageMimeType': localUpdated.receiptImageMimeType,
+          'receiptImageUrl': localUpdated.receiptImageUrl,
+          'receiptStorageKey': localUpdated.receiptStorageKey,
+          'receiptOcrText': localUpdated.receiptOcrText,
           'isIncome': localUpdated.isIncome,
           'isRecurring': localUpdated.isRecurring,
-          if (localUpdated.recurringFrequency != null)
-            'recurringRule': localUpdated.recurringFrequency!.name,
+          'recurringRule': localUpdated.isRecurring
+              ? localUpdated.recurringFrequency?.name
+              : null,
+          'recurringDueDay': localUpdated.isRecurring &&
+                  localUpdated.recurringFrequency == RecurringFrequency.monthly
+              ? localUpdated.recurringDueDay
+              : null,
         });
         if (!mounted) return;
         await _ds.clearPendingUpsert(localUpdated.id);

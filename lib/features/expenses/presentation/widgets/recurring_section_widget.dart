@@ -1,6 +1,7 @@
 // Figma: Component/RecurringSection
 import 'package:flutter/material.dart';
 import 'package:flutter_animate/flutter_animate.dart';
+
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/expense.dart';
@@ -8,16 +9,20 @@ import '../../domain/entities/expense.dart';
 class RecurringSectionWidget extends StatelessWidget {
   final bool isRecurring;
   final RecurringFrequency frequency;
+  final int monthlyDueDay;
   final ValueChanged<bool> onToggle;
   final ValueChanged<RecurringFrequency> onFrequency;
+  final ValueChanged<int> onMonthlyDueDayChanged;
   final int delayMs;
 
   const RecurringSectionWidget({
     super.key,
     required this.isRecurring,
     required this.frequency,
+    required this.monthlyDueDay,
     required this.onToggle,
     required this.onFrequency,
+    required this.onMonthlyDueDayChanged,
     this.delayMs = 275,
   });
 
@@ -139,6 +144,67 @@ class RecurringSectionWidget extends StatelessWidget {
           ),
           secondChild: const SizedBox.shrink(),
         ),
+
+        if (isRecurring && frequency == RecurringFrequency.monthly)
+          Padding(
+            padding: EdgeInsets.only(top: R.s(10)),
+            child: Container(
+              padding: EdgeInsets.symmetric(horizontal: R.md, vertical: R.s(10)),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(R.s(12)),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.event_repeat_rounded,
+                    size: R.s(18),
+                    color: AppColors.primary,
+                  ),
+                  SizedBox(width: R.s(10)),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Monthly due day',
+                          style: TextStyle(
+                            fontSize: R.t(13),
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        Text(
+                          'Reminders use this day each month',
+                          style: TextStyle(
+                            fontSize: R.t(11),
+                            color: AppColors.textTertiary,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  DropdownButton<int>(
+                    value: monthlyDueDay,
+                    underline: const SizedBox.shrink(),
+                    borderRadius: BorderRadius.circular(R.s(10)),
+                    onChanged: (value) {
+                      if (value != null) {
+                        onMonthlyDueDayChanged(value);
+                      }
+                    },
+                    items: List.generate(31, (index) {
+                      final day = index + 1;
+                      return DropdownMenuItem<int>(
+                        value: day,
+                        child: Text('$day'),
+                      );
+                    }),
+                  ),
+                ],
+              ),
+            ),
+          ),
       ],
     );
   }

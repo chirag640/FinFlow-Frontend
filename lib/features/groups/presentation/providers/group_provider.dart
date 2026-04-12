@@ -12,6 +12,7 @@ import '../../data/datasources/group_local_datasource.dart';
 import '../../domain/entities/group.dart';
 import '../../domain/entities/group_expense.dart';
 import '../../domain/entities/group_member.dart';
+import '../../domain/entities/group_settlement_audit.dart';
 
 final groupDatasourceProvider = Provider<GroupLocalDatasource>(
   (ref) => GroupLocalDatasource(),
@@ -161,6 +162,7 @@ class GroupNotifier extends StateNotifier<GroupState> {
         id: groupId,
         name: name,
         emoji: emoji,
+        ownerId: (serverGroup['ownerId'] as String?) ?? _cloudUserId,
         members: members,
         currentUserId: ownerMemberId,
         createdAt: serverGroup['createdAt'] != null
@@ -336,7 +338,9 @@ class GroupExpenseState {
         isLoading: isLoading ?? this.isLoading,
         isLoadingMore: isLoadingMore ?? this.isLoadingMore,
         error: identical(error, _sentinel) ? this.error : error as String?,
-        nextCursor: identical(nextCursor, _sentinel) ? this.nextCursor : nextCursor as String?,
+        nextCursor: identical(nextCursor, _sentinel)
+            ? this.nextCursor
+            : nextCursor as String?,
         hasMore: hasMore ?? this.hasMore,
         total: total ?? this.total,
       );
@@ -407,12 +411,12 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpenseState> {
       );
       final data = res.data['data'] as Map<String, dynamic>;
       final serverExpenses = (data['data'] as List?) ?? [];
-      
+
       for (final e in serverExpenses) {
         final exp = GroupExpense.fromServerJson(e as Map<String, dynamic>);
         await _ds.saveGroupExpense(exp);
       }
-      
+
       if (mounted) {
         _load();
         state = state.copyWith(
@@ -431,7 +435,10 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpenseState> {
 
   /// Load more expenses using cursor pagination
   Future<void> loadMore() async {
-    if (!_isConnected || state.isLoadingMore || !state.hasMore || state.nextCursor == null) {
+    if (!_isConnected ||
+        state.isLoadingMore ||
+        !state.hasMore ||
+        state.nextCursor == null) {
       return;
     }
 
@@ -450,7 +457,7 @@ class GroupExpenseNotifier extends StateNotifier<GroupExpenseState> {
       );
       final data = res.data['data'] as Map<String, dynamic>;
       final serverExpenses = (data['data'] as List?) ?? [];
-      
+
       final newExpenses = <GroupExpense>[];
       for (final e in serverExpenses) {
         final exp = GroupExpense.fromServerJson(e as Map<String, dynamic>);
@@ -616,4 +623,195 @@ final groupExpenseProvider = StateNotifierProvider.family<GroupExpenseNotifier,
     GroupExpenseState, String>((ref, groupId) {
   final ds = ref.watch(groupDatasourceProvider);
   return GroupExpenseNotifier(ds, groupId, ref);
+});
+
+class GroupSettlementAuditState {
+  final List<GroupSettlementAudit> audits;
+  final bool isLoading;
+  final bool isSubmitting;
+  final String? error;
+
+  const GroupSettlementAuditState({
+    this.audits = const [],
+    this.isLoading = false,
+    this.isSubmitting = false,
+    this.error,
+  });
+
+  GroupSettlementAuditState copyWith({
+    List<GroupSettlementAudit>? audits,
+    bool? isLoading,
+    bool? isSubmitting,
+    Object? error = _sentinel,
+  }) {
+    return GroupSettlementAuditState(
+      audits: audits ?? this.audits,
+      isLoading: isLoading ?? this.isLoading,
+      isSubmitting: isSubmitting ?? this.isSubmitting,
+      error: identical(error, _sentinel) ? this.error : error as String?,
+    );
+  }
+
+  static const _sentinel = Object();
+}
+
+class GroupSettlementAuditNotifier
+    extends StateNotifier<GroupSettlementAuditState> {
+  final String _groupId;
+  final Ref _ref;
+
+  GroupSettlementAuditNotifier(this._groupId, this._ref)
+      : super(const GroupSettlementAuditState()) {
+    refresh();
+  }
+
+  bool get _isConnected {
+    final hasNetwork = _ref.read(connectivityProvider);
+    final isAuthenticated = _ref.read(cloudAuthProvider).isConnected;
+    return hasNetwork && isAuthenticated;
+  }
+
+  Future<void> refresh() async {
+    if (!_isConnected) return;
+
+    state = state.copyWith(isLoading: true);
+    try {
+      final dio = _ref.read(dioProvider);
+      final res = await dio.get(ApiEndpoints.groupSettlementAudits(_groupId));
+      final payload = res.data['data'] as Map<String, dynamic>?;
+      final records = (payload?['data'] as List?) ?? const [];
+      final audits = records
+          .whereType<Map<String, dynamic>>()
+          .map(GroupSettlementAudit.fromServerJson)
+          .toList()
+        ..sort((a, b) => b.settledAt.compareTo(a.settledAt));
+
+      if (!mounted) return;
+      state = state.copyWith(
+        audits: audits,
+        isLoading: false,
+        error: null,
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isLoading: false,
+        error: formatDioError(e),
+      );
+    }
+  }
+
+  Future<void> submitDispute({
+    required String settlementExpenseId,
+    required String reason,
+    String? note,
+  }) async {
+    if (!_isConnected) {
+      throw Exception('You need to be online to dispute a settlement.');
+    }
+
+    final trimmedReason = reason.trim();
+    if (trimmedReason.isEmpty) {
+      throw Exception('Dispute reason is required.');
+    }
+
+    state = state.copyWith(isSubmitting: true, error: null);
+    try {
+      final dio = _ref.read(dioProvider);
+      final res = await dio.post(
+        ApiEndpoints.groupSettlementDispute(_groupId, settlementExpenseId),
+        data: {
+          'reason': trimmedReason,
+          if (note != null && note.trim().isNotEmpty) 'note': note.trim(),
+        },
+      );
+      final payload = res.data['data'] as Map<String, dynamic>;
+      final audit = GroupSettlementAudit.fromServerJson(payload);
+
+      if (!mounted) return;
+      state = state.copyWith(
+        audits: _upsertAudit(state.audits, audit),
+        isSubmitting: false,
+        error: null,
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isSubmitting: false,
+        error: formatDioError(
+          e,
+          fallback: 'Failed to submit settlement dispute.',
+        ),
+      );
+      throw Exception(formatDioError(
+        e,
+        fallback: 'Failed to submit settlement dispute.',
+      ));
+    }
+  }
+
+  Future<void> resolveDispute({
+    required String settlementExpenseId,
+    String? resolutionNote,
+  }) async {
+    if (!_isConnected) {
+      throw Exception('You need to be online to resolve a settlement dispute.');
+    }
+
+    state = state.copyWith(isSubmitting: true, error: null);
+    try {
+      final dio = _ref.read(dioProvider);
+      final res = await dio.post(
+        ApiEndpoints.groupSettlementResolve(_groupId, settlementExpenseId),
+        data: {
+          if (resolutionNote != null && resolutionNote.trim().isNotEmpty)
+            'resolutionNote': resolutionNote.trim(),
+        },
+      );
+      final payload = res.data['data'] as Map<String, dynamic>;
+      final audit = GroupSettlementAudit.fromServerJson(payload);
+
+      if (!mounted) return;
+      state = state.copyWith(
+        audits: _upsertAudit(state.audits, audit),
+        isSubmitting: false,
+        error: null,
+      );
+    } on DioException catch (e) {
+      if (!mounted) return;
+      state = state.copyWith(
+        isSubmitting: false,
+        error: formatDioError(
+          e,
+          fallback: 'Failed to resolve settlement dispute.',
+        ),
+      );
+      throw Exception(formatDioError(
+        e,
+        fallback: 'Failed to resolve settlement dispute.',
+      ));
+    }
+  }
+
+  List<GroupSettlementAudit> _upsertAudit(
+    List<GroupSettlementAudit> source,
+    GroupSettlementAudit updated,
+  ) {
+    final next = [...source];
+    final idx = next.indexWhere((a) => a.id == updated.id);
+    if (idx >= 0) {
+      next[idx] = updated;
+    } else {
+      next.add(updated);
+    }
+    next.sort((a, b) => b.settledAt.compareTo(a.settledAt));
+    return next;
+  }
+}
+
+final groupSettlementAuditProvider = StateNotifierProvider.family<
+    GroupSettlementAuditNotifier,
+    GroupSettlementAuditState,
+    String>((ref, groupId) {
+  return GroupSettlementAuditNotifier(groupId, ref);
 });

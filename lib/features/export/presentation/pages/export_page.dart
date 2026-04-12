@@ -15,7 +15,9 @@ import '../../../expenses/domain/entities/expense.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 import '../../data/export_preset_store.dart';
+import '../../data/export_schedule_store.dart';
 import '../../domain/export_options.dart';
+import '../../domain/export_schedule.dart';
 import '../../services/csv_export_service.dart';
 import '../../services/pdf_export_service.dart';
 
@@ -36,20 +38,30 @@ class _ExportPageState extends ConsumerState<ExportPage> {
   ExportGrouping _grouping = ExportGrouping.category;
   ExportSummaryLayout _summaryLayout = ExportSummaryLayout.standard;
   ExportBrandTemplate _brandTemplate = ExportBrandTemplate.classic;
+  ExportScheduleFrequency _newScheduleFrequency =
+      ExportScheduleFrequency.weekly;
   bool _includeComparison = false;
   final Set<ExpenseCategory> _categories = <ExpenseCategory>{};
   List<ExportPreset> _presets = const <ExportPreset>[];
+  List<ExportSchedule> _schedules = const <ExportSchedule>[];
 
   @override
   void initState() {
     super.initState();
     _loadPresets();
+    _loadSchedules();
   }
 
   Future<void> _loadPresets() async {
     final loaded = ExportPresetStore.load();
     if (!mounted) return;
     setState(() => _presets = loaded);
+  }
+
+  Future<void> _loadSchedules() async {
+    final loaded = ExportScheduleStore.load();
+    if (!mounted) return;
+    setState(() => _schedules = loaded);
   }
 
   Future<void> _saveCurrentAsPreset() async {
@@ -87,6 +99,63 @@ class _ExportPageState extends ConsumerState<ExportPage> {
     await ExportPresetStore.saveAll(updated);
     if (!mounted) return;
     setState(() => _presets = updated);
+  }
+
+  Future<void> _saveCurrentAsSchedule() async {
+    final name = await DSInputDialog.show(
+      context: context,
+      title: 'Schedule Export',
+      hintText: 'e.g. Weekly Finance Report',
+      confirmLabel: 'Schedule',
+    );
+
+    if (name == null || name.isEmpty) return;
+
+    final now = DateTime.now();
+    final schedule = ExportSchedule(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: name,
+      frequency: _newScheduleFrequency,
+      format: _format == _ExportFormat.csv
+          ? ExportScheduleFormat.csv
+          : ExportScheduleFormat.pdf,
+      hour: 9,
+      minute: 0,
+      dayOfWeek: now.weekday,
+      dayOfMonth: now.day,
+      transactionFilter: _transactionFilter,
+      grouping: _grouping,
+      summaryLayout: _summaryLayout,
+      brandTemplate: _brandTemplate,
+      categories: _categories.map((e) => e.name).toSet(),
+      includeComparison: _includeComparison,
+    );
+
+    final updated = <ExportSchedule>[
+      ..._schedules.where((item) => item.name != name),
+      schedule,
+    ];
+    await ExportScheduleStore.saveAll(updated);
+    if (!mounted) return;
+    setState(() => _schedules = updated);
+  }
+
+  Future<void> _toggleScheduleEnabled(
+      ExportSchedule schedule, bool enabled) async {
+    final updated = _schedules
+        .map((item) =>
+            item.id == schedule.id ? item.copyWith(enabled: enabled) : item)
+        .toList();
+    await ExportScheduleStore.saveAll(updated);
+    if (!mounted) return;
+    setState(() => _schedules = updated);
+  }
+
+  Future<void> _deleteSchedule(String id) async {
+    final updated = _schedules.where((item) => item.id != id).toList();
+    await ExportScheduleStore.saveAll(updated);
+    if (!mounted) return;
+    setState(() => _schedules = updated);
   }
 
   void _applyPreset(ExportPreset preset) {
@@ -297,6 +366,53 @@ class _ExportPageState extends ConsumerState<ExportPage> {
                 }),
               ],
             ).animate().fadeIn(delay: 80.ms),
+            const Gap(20),
+
+            const Text('Scheduled Exports',
+                style: TextStyle(
+                    fontWeight: FontWeight.w700, color: AppColors.textPrimary)),
+            const Gap(10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                ...ExportScheduleFrequency.values.map((frequency) {
+                  return _ChoicePill(
+                    label: _scheduleFrequencyLabel(frequency),
+                    selected: _newScheduleFrequency == frequency,
+                    onTap: () =>
+                        setState(() => _newScheduleFrequency = frequency),
+                  );
+                }),
+                _ChoicePill(
+                  label: '+ Schedule Current',
+                  selected: false,
+                  onTap: _saveCurrentAsSchedule,
+                ),
+              ],
+            ).animate().fadeIn(delay: 90.ms),
+            const Gap(8),
+            if (_schedules.isEmpty)
+              const Text(
+                'No schedules yet. Scheduled runs execute when the app is active.',
+                style: TextStyle(fontSize: 12, color: AppColors.textTertiary),
+              )
+            else
+              Column(
+                children: _schedules
+                    .map(
+                      (schedule) => Padding(
+                        padding: const EdgeInsets.only(top: 8),
+                        child: _ScheduledExportTile(
+                          schedule: schedule,
+                          onToggle: (value) =>
+                              _toggleScheduleEnabled(schedule, value),
+                          onDelete: () => _deleteSchedule(schedule.id),
+                        ),
+                      ),
+                    )
+                    .toList(),
+              ),
             const Gap(20),
 
             // Date range
@@ -555,6 +671,13 @@ class _ExportPageState extends ConsumerState<ExportPage> {
         ExportBrandTemplate.minimal => 'Minimal',
         ExportBrandTemplate.ledger => 'Ledger',
       };
+
+  String _scheduleFrequencyLabel(ExportScheduleFrequency value) =>
+      switch (value) {
+        ExportScheduleFrequency.daily => 'Daily',
+        ExportScheduleFrequency.weekly => 'Weekly',
+        ExportScheduleFrequency.monthly => 'Monthly',
+      };
 }
 
 class _DateTile extends StatelessWidget {
@@ -615,7 +738,9 @@ class _FormatChip extends StatelessWidget {
         duration: const Duration(milliseconds: 200),
         padding: EdgeInsets.symmetric(horizontal: R.s(14), vertical: R.s(12)),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primaryExtraLight : Theme.of(context).colorScheme.surface,
+          color: selected
+              ? AppColors.primaryExtraLight
+              : Theme.of(context).colorScheme.surface,
           borderRadius: AppRadius.md,
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
@@ -665,7 +790,9 @@ class _ChoicePill extends StatelessWidget {
         duration: const Duration(milliseconds: 180),
         padding: EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(8)),
         decoration: BoxDecoration(
-          color: selected ? AppColors.primaryExtraLight : Theme.of(context).colorScheme.surface,
+          color: selected
+              ? AppColors.primaryExtraLight
+              : Theme.of(context).colorScheme.surface,
           borderRadius: AppRadius.xl,
           border: Border.all(
             color: selected ? AppColors.primary : AppColors.border,
@@ -735,6 +862,70 @@ class _PresetChip extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _ScheduledExportTile extends StatelessWidget {
+  final ExportSchedule schedule;
+  final ValueChanged<bool> onToggle;
+  final VoidCallback onDelete;
+
+  const _ScheduledExportTile({
+    required this.schedule,
+    required this.onToggle,
+    required this.onDelete,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    return Container(
+      padding: EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.s(10)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: AppRadius.md,
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  schedule.name,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  '${schedule.cadenceLabel} · ${schedule.format.name.toUpperCase()}',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Switch.adaptive(
+            value: schedule.enabled,
+            activeThumbColor: AppColors.primary,
+            onChanged: onToggle,
+          ),
+          IconButton(
+            onPressed: onDelete,
+            tooltip: 'Delete schedule',
+            icon: const Icon(
+              Icons.delete_outline_rounded,
+              color: AppColors.error,
+            ),
+          ),
+        ],
       ),
     );
   }

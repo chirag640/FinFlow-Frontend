@@ -52,7 +52,7 @@ class BudgetState {
   });
 
   double get totalAllocated =>
-      envelopes.fold(0.0, (s, e) => s + e.allocatedAmount);
+      envelopes.fold(0.0, (s, e) => s + e.effectiveAllocated);
   double get totalSpent => envelopes.fold(0.0, (s, e) => s + e.spentAmount);
 
   BudgetState copyWith({
@@ -150,6 +150,7 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
     final prevYear = state.month == 1 ? state.year - 1 : state.year;
     final prevBudgets = _ds.getBudgetsForMonth(prevMonth, prevYear);
     final prevBudgetMap = {for (final b in prevBudgets) b.categoryKey: b};
+    final settings = _ref.read(settingsProvider);
     // Compute prev-month spending directly from all loaded expenses
     final prevSpendingByKey = <String, double>{};
     for (final e in expState.expenses) {
@@ -167,7 +168,9 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
         if (pb != null) {
           final prevSpent = prevSpendingByKey[b.categoryKey] ?? 0.0;
           final remaining = pb.allocatedAmount - prevSpent;
-          if (remaining > 0) carry = remaining;
+          if (remaining > 0) {
+            carry = _applyCarryForwardStrategy(remaining, settings);
+          }
         }
       }
       return BudgetEnvelope(
@@ -304,6 +307,22 @@ class BudgetNotifier extends StateNotifier<BudgetState> {
     if (raw is DateTime) return raw;
     if (raw is String) return DateTime.tryParse(raw);
     return null;
+  }
+
+  double _applyCarryForwardStrategy(double remaining, SettingsState settings) {
+    switch (settings.carryForwardStrategy) {
+      case CarryForwardStrategy.none:
+        return 0;
+      case CarryForwardStrategy.full:
+        return remaining;
+      case CarryForwardStrategy.percentage:
+        return remaining * (settings.carryForwardPercent / 100);
+      case CarryForwardStrategy.capped:
+        if (settings.carryForwardCap <= 0) return 0;
+        return remaining > settings.carryForwardCap
+            ? settings.carryForwardCap
+            : remaining;
+    }
   }
 }
 

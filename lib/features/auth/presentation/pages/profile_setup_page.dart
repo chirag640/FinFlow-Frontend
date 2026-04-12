@@ -86,7 +86,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   style: TextStyle(
                     fontSize: R.t(28),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                     letterSpacing: -0.5,
                     height: 1.2,
                   ),
@@ -96,7 +96,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   'This helps us personalize your financial dashboard.',
                   style: TextStyle(
                     fontSize: R.t(15),
-                    color: AppColors.textSecondary,
+                    color: colorScheme.onSurfaceVariant,
                     height: 1.5,
                   ),
                 ).animate(delay: 80.ms).fadeIn(duration: 400.ms),
@@ -119,7 +119,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   style: TextStyle(
                     fontSize: R.t(11),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textTertiary,
+                    color: colorScheme.outline,
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -132,7 +132,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   style: TextStyle(
                     fontSize: R.t(18),
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                   ),
                   decoration: InputDecoration(
                     hintText: 'e.g. Arjun Sharma',
@@ -166,7 +166,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   style: TextStyle(
                     fontSize: R.t(11),
                     fontWeight: FontWeight.w700,
-                    color: AppColors.textTertiary,
+                    color: colorScheme.outline,
                     letterSpacing: 1.2,
                   ),
                 ),
@@ -181,7 +181,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                   style: TextStyle(
                     fontSize: R.t(18),
                     fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
+                    color: colorScheme.onSurface,
                   ),
                   decoration: InputDecoration(
                     hintText: 'e.g. 50000',
@@ -189,7 +189,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                     prefixStyle: TextStyle(
                       fontSize: R.t(18),
                       fontWeight: FontWeight.w600,
-                      color: AppColors.textSecondary,
+                      color: colorScheme.onSurfaceVariant,
                     ),
                     filled: true,
                     fillColor:
@@ -213,7 +213,7 @@ class _ProfileSetupPageState extends ConsumerState<ProfileSetupPage> {
                         'Used to calculate your savings rate. Not shared.',
                     helperStyle: TextStyle(
                       fontSize: R.t(12),
-                      color: AppColors.textTertiary,
+                      color: colorScheme.outline,
                     ),
                   ),
                 )

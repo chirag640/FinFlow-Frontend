@@ -27,12 +27,19 @@ class Expense extends Equatable {
   final String id;
   final double amount;
   final String description;
+  static const _sentinel = Object();
   final ExpenseCategory category;
   final DateTime date;
   final String? note;
   final bool isIncome;
   final bool isRecurring;
   final RecurringFrequency? recurringFrequency;
+  final int? recurringDueDay;
+  final String? receiptImageBase64;
+  final String? receiptImageMimeType;
+  final String? receiptImageUrl;
+  final String? receiptStorageKey;
+  final String? receiptOcrText;
   final DateTime updatedAt;
 
   Expense({
@@ -45,6 +52,12 @@ class Expense extends Equatable {
     this.isIncome = false,
     this.isRecurring = false,
     this.recurringFrequency,
+    this.recurringDueDay,
+    this.receiptImageBase64,
+    this.receiptImageMimeType,
+    this.receiptImageUrl,
+    this.receiptStorageKey,
+    this.receiptOcrText,
     DateTime? updatedAt,
   }) : updatedAt = updatedAt ?? DateTime.now();
 
@@ -53,12 +66,19 @@ class Expense extends Equatable {
     String? description,
     ExpenseCategory? category,
     DateTime? date,
-    String? note,
+    Object? note = _sentinel,
     bool? isIncome,
     bool? isRecurring,
-    RecurringFrequency? recurringFrequency,
+    Object? recurringFrequency = _sentinel,
+    Object? recurringDueDay = _sentinel,
+    Object? receiptImageBase64 = _sentinel,
+    Object? receiptImageMimeType = _sentinel,
+    Object? receiptImageUrl = _sentinel,
+    Object? receiptStorageKey = _sentinel,
+    Object? receiptOcrText = _sentinel,
     DateTime? updatedAt,
     bool clearRecurring = false,
+    bool clearRecurringDueDay = false,
   }) =>
       Expense(
         id: id,
@@ -66,12 +86,34 @@ class Expense extends Equatable {
         description: description ?? this.description,
         category: category ?? this.category,
         date: date ?? this.date,
-        note: note ?? this.note,
+        note: identical(note, _sentinel) ? this.note : note as String?,
         isIncome: isIncome ?? this.isIncome,
         isRecurring: isRecurring ?? this.isRecurring,
         recurringFrequency: clearRecurring
             ? null
-            : recurringFrequency ?? this.recurringFrequency,
+            : identical(recurringFrequency, _sentinel)
+                ? this.recurringFrequency
+                : recurringFrequency as RecurringFrequency?,
+        recurringDueDay: clearRecurringDueDay
+            ? null
+            : identical(recurringDueDay, _sentinel)
+                ? this.recurringDueDay
+                : recurringDueDay as int?,
+        receiptImageBase64: identical(receiptImageBase64, _sentinel)
+            ? this.receiptImageBase64
+            : receiptImageBase64 as String?,
+        receiptImageMimeType: identical(receiptImageMimeType, _sentinel)
+            ? this.receiptImageMimeType
+            : receiptImageMimeType as String?,
+        receiptImageUrl: identical(receiptImageUrl, _sentinel)
+            ? this.receiptImageUrl
+            : receiptImageUrl as String?,
+        receiptStorageKey: identical(receiptStorageKey, _sentinel)
+            ? this.receiptStorageKey
+            : receiptStorageKey as String?,
+        receiptOcrText: identical(receiptOcrText, _sentinel)
+            ? this.receiptOcrText
+            : receiptOcrText as String?,
         updatedAt: updatedAt ?? DateTime.now(),
       );
 
@@ -85,6 +127,12 @@ class Expense extends Equatable {
         'isIncome': isIncome,
         'isRecurring': isRecurring,
         'recurringFrequency': recurringFrequency?.name,
+        'recurringDueDay': recurringDueDay,
+        'receiptImageBase64': receiptImageBase64,
+        'receiptImageMimeType': receiptImageMimeType,
+        'receiptImageUrl': receiptImageUrl,
+        'receiptStorageKey': receiptStorageKey,
+        'receiptOcrText': receiptOcrText,
         'updatedAt': updatedAt.toIso8601String(),
       };
 
@@ -100,6 +148,12 @@ class Expense extends Equatable {
         recurringFrequency: j['recurringFrequency'] != null
             ? RecurringFrequency.fromString(j['recurringFrequency'] as String)
             : null,
+        recurringDueDay: (j['recurringDueDay'] as num?)?.toInt(),
+        receiptImageBase64: j['receiptImageBase64'] as String?,
+        receiptImageMimeType: j['receiptImageMimeType'] as String?,
+        receiptImageUrl: j['receiptImageUrl'] as String?,
+        receiptStorageKey: j['receiptStorageKey'] as String?,
+        receiptOcrText: j['receiptOcrText'] as String?,
         updatedAt: _parseDateTime(j['updatedAt']) ??
             _parseDateTime(j['date']) ??
             DateTime.now(),
@@ -123,6 +177,12 @@ class Expense extends Equatable {
         isIncome,
         isRecurring,
         recurringFrequency,
+        recurringDueDay,
+        receiptImageBase64,
+        receiptImageMimeType,
+        receiptImageUrl,
+        receiptStorageKey,
+        receiptOcrText,
         updatedAt,
       ];
 }

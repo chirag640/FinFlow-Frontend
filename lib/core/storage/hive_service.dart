@@ -1,25 +1,91 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import '../constants/app_constants.dart';
 
 abstract class HiveService {
+  static const List<String> _requiredBoxes = [
+    AppConstants.expensesBox,
+    AppConstants.groupsBox,
+    AppConstants.budgetsBox,
+    AppConstants.userBox,
+    AppConstants.settingsBox,
+    AppConstants.goalsBox,
+    AppConstants.upiIdsBox,
+    AppConstants.pendingDeletionsBox,
+    AppConstants.expensePendingUpsertsBox,
+    AppConstants.budgetPendingUpsertsBox,
+    AppConstants.budgetPendingDeletionsBox,
+    AppConstants.goalPendingDeletionsBox,
+    AppConstants.goalPendingUpsertsBox,
+  ];
+
   static Future<void> init() async {
     await Hive.initFlutter();
-    await Future.wait([
-      Hive.openBox(AppConstants.expensesBox),
-      Hive.openBox(AppConstants.groupsBox),
-      Hive.openBox(AppConstants.budgetsBox),
-      Hive.openBox(AppConstants.userBox),
-      Hive.openBox(AppConstants.settingsBox),
-      Hive.openBox(AppConstants.goalsBox),
-      Hive.openBox(AppConstants.upiIdsBox),
-      Hive.openBox(AppConstants.pendingDeletionsBox),
-      Hive.openBox(AppConstants.expensePendingUpsertsBox),
-      Hive.openBox(AppConstants.budgetPendingUpsertsBox),
-      Hive.openBox(AppConstants.budgetPendingDeletionsBox),
-      Hive.openBox(AppConstants.goalPendingDeletionsBox),
-      Hive.openBox(AppConstants.goalPendingUpsertsBox),
-    ]);
+    try {
+      await _openRequiredBoxes();
+      await migrateStorageSchema();
+    } catch (error) {
+      debugPrint(
+        '[FinFlow] Hive init failed. Attempting local cache repair: $error',
+      );
+      await _recoverCorruptedCache();
+    }
+  }
+
+  static Future<void> migrateStorageSchema() async {
+    final settingsBox = Hive.box(AppConstants.settingsBox);
+    final rawVersion = settingsBox.get(AppConstants.storageSchemaVersionKey);
+    final currentVersion = rawVersion is int
+        ? rawVersion
+        : int.tryParse(rawVersion?.toString() ?? "0") ?? 0;
+
+    if (currentVersion >= AppConstants.storageSchemaVersion) {
+      return;
+    }
+
+    if (settingsBox.containsKey(AppConstants.hasOnboardedKey)) {
+      await settingsBox.delete(AppConstants.hasOnboardedKey);
+    }
+
+    await settingsBox.put(
+      AppConstants.storageSchemaVersionKey,
+      AppConstants.storageSchemaVersion,
+    );
+    await settingsBox.put(
+      AppConstants.storageSchemaUpdatedAtKey,
+      DateTime.now().toIso8601String(),
+    );
+  }
+
+  static Future<void> _openRequiredBoxes() async {
+    await Future.wait(_requiredBoxes.map(Hive.openBox));
+  }
+
+  static Future<void> _recoverCorruptedCache() async {
+    for (final boxName in _requiredBoxes) {
+      if (Hive.isBoxOpen(boxName)) {
+        await Hive.box(boxName).close();
+      }
+      await Hive.deleteBoxFromDisk(boxName);
+    }
+
+    await _openRequiredBoxes();
+    await migrateStorageSchema();
+    await markCacheRepairNotice();
+  }
+
+  static Future<void> markCacheRepairNotice() async {
+    final settingsBox = Hive.box(AppConstants.settingsBox);
+    await settingsBox.put(AppConstants.cacheRepairNoticeActiveKey, true);
+    await settingsBox.put(
+      AppConstants.cacheRepairNoticeMessageKey,
+      'Local cache was repaired after a storage issue. Review sync conflicts if data looks outdated.',
+    );
+    await settingsBox.put(
+      AppConstants.cacheRepairNoticeUpdatedAtKey,
+      DateTime.now().toIso8601String(),
+    );
   }
 
   static Box get expenses => Hive.box(AppConstants.expensesBox);

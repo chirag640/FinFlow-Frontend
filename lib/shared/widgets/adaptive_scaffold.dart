@@ -5,6 +5,9 @@ import '../../core/design/app_colors.dart';
 import '../../core/router/app_router.dart';
 import '../../core/utils/responsive.dart';
 import 'connectivity_banner.dart';
+import 'local_cache_repair_banner.dart';
+import 'shell_privacy_toggle_bar.dart';
+import 'sync_circuit_breaker_banner.dart';
 
 class AdaptiveScaffold extends StatelessWidget {
   final Widget child;
@@ -65,6 +68,9 @@ class AdaptiveScaffold extends StatelessWidget {
         body: Column(
           children: [
             const ConnectivityBanner(),
+            const SyncCircuitBreakerBanner(),
+            const LocalCacheRepairBanner(),
+            const ShellPrivacyToggleBar(),
             Expanded(child: child),
           ],
         ),
@@ -151,6 +157,9 @@ class AdaptiveScaffold extends StatelessWidget {
             child: Column(
               children: [
                 const ConnectivityBanner(),
+                const SyncCircuitBreakerBanner(),
+                const LocalCacheRepairBanner(),
+                const ShellPrivacyToggleBar(),
                 Expanded(child: child),
               ],
             ),

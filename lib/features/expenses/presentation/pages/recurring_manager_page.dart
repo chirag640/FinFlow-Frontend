@@ -15,6 +15,9 @@ import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/expense.dart';
 import '../providers/expense_provider.dart';
 
+DateTime _dateOnly(DateTime value) =>
+    DateTime(value.year, value.month, value.day);
+
 class RecurringManagerPage extends ConsumerWidget {
   const RecurringManagerPage({super.key});
 
@@ -24,7 +27,17 @@ class RecurringManagerPage extends ConsumerWidget {
     final colorScheme = Theme.of(context).colorScheme;
     final all = ref.watch(expenseProvider).expenses;
     final templates = all.where((e) => e.isRecurring && !e.isIncome).toList()
-      ..sort((a, b) => a.category.name.compareTo(b.category.name));
+      ..sort(
+        (a, b) => RecurringEngineService.nextDueFor(a).compareTo(
+          RecurringEngineService.nextDueFor(b),
+        ),
+      );
+    final today = _dateOnly(DateTime.now());
+    final missingCount = templates
+        .where((template) =>
+            _dateOnly(RecurringEngineService.nextDueFor(template))
+                .isBefore(today))
+        .length;
 
     return Scaffold(
       backgroundColor: colorScheme.surfaceContainerLow,
@@ -34,7 +47,7 @@ class RecurringManagerPage extends ConsumerWidget {
         elevation: 0,
         leading: BackButton(color: colorScheme.onSurface),
         title: Text(
-          'Recurring Expenses',
+          'Bill Reminders Center',
           style: TextStyle(
             fontSize: R.t(18),
             fontWeight: FontWeight.w700,
@@ -55,7 +68,8 @@ class RecurringManagerPage extends ConsumerWidget {
             )
           : Column(
               children: [
-                _InfoBanner(count: templates.length),
+                _InfoBanner(
+                    count: templates.length, missingCount: missingCount),
                 Expanded(
                   child: ListView.separated(
                     padding: EdgeInsets.fromLTRB(R.md, R.s(12), R.md, R.s(80)),
@@ -78,8 +92,9 @@ class RecurringManagerPage extends ConsumerWidget {
 
 // ── Info Banner ───────────────────────────────────────────────────────────────
 class _InfoBanner extends StatelessWidget {
-  const _InfoBanner({required this.count});
+  const _InfoBanner({required this.count, required this.missingCount});
   final int count;
+  final int missingCount;
 
   @override
   Widget build(BuildContext context) {
@@ -89,19 +104,36 @@ class _InfoBanner extends StatelessWidget {
       color: AppColors.primaryExtraLight,
       padding: EdgeInsets.symmetric(horizontal: R.s(20), vertical: R.s(12)),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Icon(Icons.info_outline_rounded,
               size: R.s(16), color: AppColors.primary),
           SizedBox(width: R.s(10)),
           Expanded(
-            child: Text(
-              '$count recurring template${count == 1 ? '' : 's'} found. '
-              'Swipe left to delete, tap to edit.',
-              style: TextStyle(
-                fontSize: R.t(12),
-                color: AppColors.primary,
-                fontWeight: FontWeight.w500,
-              ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  '$count recurring template${count == 1 ? '' : 's'} found. '
+                  'Swipe left to delete, tap Day to change monthly due date.',
+                  style: TextStyle(
+                    fontSize: R.t(12),
+                    color: AppColors.primary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                if (missingCount > 0) ...[
+                  SizedBox(height: R.xs),
+                  Text(
+                    '$missingCount template${missingCount == 1 ? '' : 's'} look overdue and may need verification.',
+                    style: TextStyle(
+                      fontSize: R.t(11),
+                      color: AppColors.errorDark,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ],
+              ],
             ),
           ),
         ],
@@ -120,8 +152,19 @@ class _RecurringTile extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     R.init(context);
     final freq = expense.recurringFrequency;
-    final nextDue = RecurringEngineService.nextDueFor(expense);
-    final due = RecurringEngineService.isDue(expense);
+    final monthlyDueDay = expense.recurringDueDay ?? expense.date.day;
+    final today = _dateOnly(DateTime.now());
+    final nextDue = _dateOnly(RecurringEngineService.nextDueFor(expense));
+    final isOverdue = nextDue.isBefore(today);
+    final isDueToday = nextDue.isAtSameMomentAs(today);
+    final due = isOverdue || isDueToday;
+    final overdueDays = isOverdue ? today.difference(nextDue).inDays : 0;
+    final statusLabel = isOverdue
+        ? 'Overdue by $overdueDays day${overdueDays == 1 ? '' : 's'}'
+        : isDueToday
+            ? 'Due today'
+            : 'Next: ${DateFormat('MMM d').format(nextDue)}';
+    final statusColor = due ? AppColors.error : AppColors.textTertiary;
 
     return Dismissible(
       key: ValueKey(expense.id),
@@ -237,19 +280,37 @@ class _RecurringTile extends ConsumerWidget {
                       Row(
                         children: [
                           Text(
-                            due
-                                ? 'Due today'
-                                : 'Next: ${DateFormat('MMM d').format(nextDue)}',
+                            statusLabel,
                             style: TextStyle(
                               fontSize: R.t(11),
                               fontWeight: FontWeight.w600,
-                              color: due
-                                  ? AppColors.error
-                                  : AppColors.textTertiary,
+                              color: statusColor,
                             ),
                           ),
                         ],
                       ),
+                      if (isOverdue)
+                        Padding(
+                          padding: EdgeInsets.only(top: R.s(2)),
+                          child: Text(
+                            'Expected on ${DateFormat('MMM d, yyyy').format(nextDue)}',
+                            style: TextStyle(
+                              fontSize: R.t(11),
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                        ),
+                      if (freq == RecurringFrequency.monthly)
+                        Padding(
+                          padding: EdgeInsets.only(top: R.s(2)),
+                          child: Text(
+                            'Due day: ${_ordinal(monthlyDueDay)} of each month',
+                            style: TextStyle(
+                              fontSize: R.t(11),
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                        ),
                     ],
                   ),
                 ),
@@ -298,6 +359,32 @@ class _RecurringTile extends ConsumerWidget {
                     else
                       Icon(Icons.chevron_right_rounded,
                           color: AppColors.textDisabled, size: R.s(18)),
+                    if (freq == RecurringFrequency.monthly)
+                      Padding(
+                        padding: EdgeInsets.only(top: R.xs),
+                        child: GestureDetector(
+                          onTap: () =>
+                              _pickMonthlyDueDay(context, ref, monthlyDueDay),
+                          child: Container(
+                            padding: EdgeInsets.symmetric(
+                              horizontal: R.sm,
+                              vertical: R.s(3),
+                            ),
+                            decoration: BoxDecoration(
+                              color: AppColors.primaryExtraLight,
+                              borderRadius: BorderRadius.circular(R.s(20)),
+                            ),
+                            child: Text(
+                              'Day $monthlyDueDay',
+                              style: TextStyle(
+                                fontSize: R.t(10),
+                                fontWeight: FontWeight.w700,
+                                color: AppColors.primary,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
                   ],
                 ),
               ],
@@ -324,6 +411,65 @@ class _RecurringTile extends ConsumerWidget {
     }
   }
 
+  Future<void> _pickMonthlyDueDay(
+    BuildContext context,
+    WidgetRef ref,
+    int initialDay,
+  ) async {
+    var selectedDay = initialDay;
+
+    final nextDay = await showDialog<int>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          title: const Text('Set monthly due day'),
+          content: DropdownButton<int>(
+            isExpanded: true,
+            value: selectedDay,
+            onChanged: (value) {
+              if (value != null) {
+                setDialogState(() => selectedDay = value);
+              }
+            },
+            items: List.generate(31, (index) {
+              final day = index + 1;
+              return DropdownMenuItem<int>(
+                value: day,
+                child: Text('${_ordinal(day)} day of month'),
+              );
+            }),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(selectedDay),
+              child: const Text('Save'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (nextDay == null || nextDay == initialDay) return;
+
+    await ref.read(expenseProvider.notifier).updateExpense(
+          expense.copyWith(recurringDueDay: nextDay),
+        );
+
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Monthly due day updated to ${_ordinal(nextDay)}.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   Future<bool?> _confirmDelete(BuildContext context) {
     return DSConfirmDialog.show(
       context: context,
@@ -334,6 +480,17 @@ class _RecurringTile extends ConsumerWidget {
       confirmLabel: 'Delete',
       isDestructive: true,
     );
+  }
+
+  String _ordinal(int day) {
+    final mod100 = day % 100;
+    if (mod100 >= 11 && mod100 <= 13) return '${day}th';
+    return switch (day % 10) {
+      1 => '${day}st',
+      2 => '${day}nd',
+      3 => '${day}rd',
+      _ => '${day}th',
+    };
   }
 }
 

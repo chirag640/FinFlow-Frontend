@@ -6,6 +6,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/components/ds_async_state.dart';
 import '../../../../core/design/components/ds_dialog.dart';
+import '../../../../core/providers/settings_provider.dart';
 import '../../../../core/router/app_router.dart';
 import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
@@ -108,6 +109,8 @@ class BudgetsPage extends ConsumerWidget {
                   ).animate().fadeIn(delay: 50.ms),
                   SizedBox(height: R.md),
                 ],
+                const _CarryForwardStrategyPanel(),
+                SizedBox(height: R.md),
                 _BudgetSummaryBar(
                   totalAllocated: state.totalAllocated,
                   totalSpent: state.totalSpent,
@@ -192,6 +195,144 @@ class BudgetsPage extends ConsumerWidget {
         child: const Icon(Icons.add_rounded),
       ),
       body: buildBody(),
+    );
+  }
+}
+
+class _CarryForwardStrategyPanel extends ConsumerWidget {
+  const _CarryForwardStrategyPanel();
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    R.init(context);
+    final colorScheme = Theme.of(context).colorScheme;
+    final settings = ref.watch(settingsProvider);
+    final settingsNotifier = ref.read(settingsProvider.notifier);
+
+    final capSliderMax = settings.carryForwardCap < 5000
+        ? 5000.0
+        : (settings.carryForwardCap * 2).clamp(5000, 500000).toDouble();
+
+    String strategyHint() {
+      switch (settings.carryForwardStrategy) {
+        case CarryForwardStrategy.full:
+          return 'Roll over 100% of unspent amount to next month.';
+        case CarryForwardStrategy.percentage:
+          return 'Roll over ${settings.carryForwardPercent.toStringAsFixed(0)}% of unspent amount.';
+        case CarryForwardStrategy.capped:
+          return 'Roll over up to ${CurrencyFormatter.format(settings.carryForwardCap)} from unspent amount.';
+        case CarryForwardStrategy.none:
+          return 'Do not roll over unspent balances.';
+      }
+    }
+
+    return Container(
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.s(14)),
+        border: Border.all(color: colorScheme.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Carry-Forward Strategy',
+            style: TextStyle(
+              fontSize: R.t(13),
+              fontWeight: FontWeight.w700,
+              color: colorScheme.onSurface,
+            ),
+          ),
+          SizedBox(height: R.xs),
+          Text(
+            strategyHint(),
+            style: TextStyle(
+              fontSize: R.t(11),
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: R.sm),
+          DropdownButtonFormField<CarryForwardStrategy>(
+            initialValue: settings.carryForwardStrategy,
+            decoration: const InputDecoration(
+              isDense: true,
+              border: OutlineInputBorder(),
+            ),
+            items: const [
+              DropdownMenuItem(
+                value: CarryForwardStrategy.full,
+                child: Text('Full rollover'),
+              ),
+              DropdownMenuItem(
+                value: CarryForwardStrategy.percentage,
+                child: Text('Percentage rollover'),
+              ),
+              DropdownMenuItem(
+                value: CarryForwardStrategy.capped,
+                child: Text('Capped rollover'),
+              ),
+              DropdownMenuItem(
+                value: CarryForwardStrategy.none,
+                child: Text('No rollover'),
+              ),
+            ],
+            onChanged: (value) {
+              if (value == null) return;
+              settingsNotifier.setCarryForwardStrategy(value);
+            },
+          ),
+          if (settings.carryForwardStrategy == CarryForwardStrategy.percentage)
+            Padding(
+              padding: EdgeInsets.only(top: R.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Rollover Percentage: ${settings.carryForwardPercent.toStringAsFixed(0)}%',
+                    style: TextStyle(
+                      fontSize: R.t(11),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Slider(
+                    value: settings.carryForwardPercent,
+                    min: 0,
+                    max: 100,
+                    divisions: 20,
+                    label:
+                        '${settings.carryForwardPercent.toStringAsFixed(0)}%',
+                    onChanged: settingsNotifier.setCarryForwardPercent,
+                  ),
+                ],
+              ),
+            ),
+          if (settings.carryForwardStrategy == CarryForwardStrategy.capped)
+            Padding(
+              padding: EdgeInsets.only(top: R.sm),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Rollover Cap: ${CurrencyFormatter.format(settings.carryForwardCap)}',
+                    style: TextStyle(
+                      fontSize: R.t(11),
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  Slider(
+                    value: settings.carryForwardCap.clamp(0, capSliderMax),
+                    min: 0,
+                    max: capSliderMax,
+                    divisions: 20,
+                    label: CurrencyFormatter.format(settings.carryForwardCap),
+                    onChanged: settingsNotifier.setCarryForwardCap,
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
     );
   }
 }

@@ -217,7 +217,7 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
               style: TextStyle(
                 fontSize: R.t(26),
                 fontWeight: FontWeight.w700,
-                color: AppColors.textPrimary,
+                color: colorScheme.onSurface,
                 letterSpacing: -0.5,
               ),
             )
@@ -229,7 +229,7 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
               subtitle,
               style: TextStyle(
                 fontSize: R.t(15),
-                color: AppColors.textSecondary,
+                color: colorScheme.onSurfaceVariant,
               ),
             ).animate(key: ValueKey('sub_$_step')).fadeIn(duration: 300.ms),
             SizedBox(height: R.s(40)),
@@ -245,9 +245,10 @@ class _PinSetupPageState extends ConsumerState<PinSetupPage> {
                   height: R.s(16),
                   decoration: BoxDecoration(
                     shape: BoxShape.circle,
-                    color: filled ? AppColors.primary : AppColors.border,
+                    color:
+                        filled ? AppColors.primary : colorScheme.outlineVariant,
                     border: Border.all(
-                      color: filled ? AppColors.primary : AppColors.borderDark,
+                      color: filled ? AppColors.primary : colorScheme.outline,
                       width: 2,
                     ),
                   ),

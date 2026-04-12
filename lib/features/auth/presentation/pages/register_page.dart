@@ -54,6 +54,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final hPad = screenWidth > 480 ? (screenWidth - 440) / 2 : 24.0;
     final colorScheme = Theme.of(context).colorScheme;
+    final onSurface = colorScheme.onSurface;
+    final onSurfaceVariant = colorScheme.onSurfaceVariant;
 
     return Scaffold(
       backgroundColor: colorScheme.surface,
@@ -79,14 +81,14 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               Text('Create account',
                   style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                         fontWeight: FontWeight.w800,
-                        color: AppColors.textPrimary,
+                        color: onSurface,
                       )).animate().fadeIn(),
               const Gap(4),
               Text('Back up and sync your finances to the cloud',
                       style: Theme.of(context)
                           .textTheme
                           .bodyMedium
-                          ?.copyWith(color: AppColors.textSecondary))
+                          ?.copyWith(color: onSurfaceVariant))
                   .animate()
                   .fadeIn(delay: 80.ms),
               const Gap(14),
@@ -145,7 +147,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                           _obscure
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
-                          color: AppColors.textTertiary,
+                          color: onSurfaceVariant,
                         ),
                         onPressed: () => setState(() => _obscure = !_obscure),
                       ),
@@ -166,7 +168,7 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                           _obscureConfirm
                               ? Icons.visibility_outlined
                               : Icons.visibility_off_outlined,
-                          color: AppColors.textTertiary,
+                          color: onSurfaceVariant,
                         ),
                         onPressed: () =>
                             setState(() => _obscureConfirm = !_obscureConfirm),
@@ -182,8 +184,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
                 padding: EdgeInsets.symmetric(horizontal: R.xs),
                 child: Text(
                   '🔒  Your data is end-to-end encrypted. We never sell your data.',
-                  style: TextStyle(
-                      fontSize: R.t(12), color: AppColors.textTertiary),
+                  style:
+                      TextStyle(fontSize: R.t(12), color: colorScheme.outline),
                 ),
               ),
               const Gap(24),
@@ -194,8 +196,8 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
               ).animate().fadeIn(delay: 300.ms),
               const Gap(20),
               Row(mainAxisAlignment: MainAxisAlignment.center, children: [
-                const Text('Already have an account? ',
-                    style: TextStyle(color: AppColors.textSecondary)),
+                Text('Already have an account? ',
+                    style: TextStyle(color: onSurfaceVariant)),
                 GestureDetector(
                   onTap: () => context.pop(),
                   child: const Text('Sign in',
@@ -214,7 +216,11 @@ class _RegisterPageState extends ConsumerState<RegisterPage> {
 
   InputDecoration _inputDec(String label, IconData icon) => InputDecoration(
         labelText: label,
-        prefixIcon: Icon(icon, color: AppColors.textTertiary, size: R.s(20)),
+        prefixIcon: Icon(
+          icon,
+          color: Theme.of(context).colorScheme.onSurfaceVariant,
+          size: R.s(20),
+        ),
         filled: true,
         fillColor: Theme.of(context).colorScheme.surfaceContainerHighest,
         border: OutlineInputBorder(

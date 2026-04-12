@@ -41,6 +41,7 @@ class _AddGroupExpensePageState extends ConsumerState<AddGroupExpensePage> {
         id: widget.groupId,
         name: '',
         emoji: '👥',
+        ownerId: '',
         members: [],
         currentUserId: '',
         createdAt: DateTime.now(),

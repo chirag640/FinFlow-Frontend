@@ -29,9 +29,12 @@ abstract class RequestHeaderKeys {
 // ── Global Dio provider ──────────────────────────────────────────────────────
 // ignore: unused_element — consumed via cloud_auth_provider.dart
 final dioProvider = Provider<Dio>((ref) {
-  const baseUrl = String.fromEnvironment('API_BASE_URL',
-      defaultValue: 'http://10.0.2.2:3000/api/v1');
-  // defaultValue: 'https://finflow-backend-lunz.onrender.com/api/v1');
+  const configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+  final baseUrl = configuredBaseUrl.isNotEmpty
+      ? configuredBaseUrl
+      : (kReleaseMode
+          ? 'https://finflow-backend-lunz.onrender.com/api/v1'
+          : 'http://10.0.2.2:3000/api/v1');
 
   final dio = Dio(BaseOptions(
     baseUrl: baseUrl,
@@ -380,6 +383,30 @@ class AuthInterceptor extends Interceptor {
 class LoggerInterceptor extends Interceptor {
   static const _line =
       '─────────────────────────────────────────────────────────────';
+  static const _redacted = '[REDACTED]';
+  static const Set<String> _sensitiveHeaders = {
+    'authorization',
+    'cookie',
+    'set-cookie',
+    'x-api-key',
+  };
+  static const Set<String> _sensitivePayloadKeys = {
+    'password',
+    'newpassword',
+    'oldpassword',
+    'confirmpassword',
+    'currentpassword',
+    'token',
+    'accesstoken',
+    'refreshtoken',
+    'otp',
+    'otpcode',
+    'code',
+    'pin',
+    'pinhash',
+    'pinverifierhash',
+    'pinsalt',
+  };
 
   @override
   void onRequest(RequestOptions options, RequestInterceptorHandler handler) {
@@ -390,19 +417,25 @@ class LoggerInterceptor extends Interceptor {
 
       if (options.headers.isNotEmpty) {
         debugPrint('│ 📋 Headers:');
-        options.headers.forEach((k, v) => debugPrint('│   $k: $v'));
+        final safeHeaders = _sanitizeHeaders(options.headers);
+        safeHeaders.forEach((k, v) => debugPrint('│   $k: $v'));
         debugPrint('├$_line');
       }
 
       if (options.queryParameters.isNotEmpty) {
         debugPrint('│ 🔍 Query:');
-        options.queryParameters.forEach((k, v) => debugPrint('│   $k: $v'));
+        final safeQuery = _sanitizePayload(options.queryParameters);
+        if (safeQuery is Map) {
+          safeQuery.forEach((k, v) => debugPrint('│   $k: $v'));
+        } else {
+          debugPrint('│   $safeQuery');
+        }
         debugPrint('├$_line');
       }
 
       if (options.data != null) {
         debugPrint('│ 📤 Payload:');
-        _printJson(options.data);
+        _printJson(_sanitizePayload(options.data));
         debugPrint('├$_line');
       }
     }
@@ -421,7 +454,7 @@ class LoggerInterceptor extends Interceptor {
       debugPrint('├$_line');
       if (printBody && response.data != null) {
         debugPrint('│ 📥 Response:');
-        _printJson(response.data);
+        _printJson(_sanitizePayload(response.data));
       } else if (!printBody) {
         debugPrint('│ 📥 [logging disabled for this request]');
       }
@@ -444,7 +477,7 @@ class LoggerInterceptor extends Interceptor {
         debugPrint('├$_line');
         if (err.response?.data != null) {
           debugPrint('│ 📥 Error body:');
-          _printJson(err.response!.data);
+          _printJson(_sanitizePayload(err.response!.data));
         }
       }
       debugPrint('└$_line');
@@ -488,5 +521,39 @@ class LoggerInterceptor extends Interceptor {
     } catch (_) {
       debugPrint('│   $data');
     }
+  }
+
+  Map<String, dynamic> _sanitizeHeaders(Map<String, dynamic> headers) {
+    final safeHeaders = <String, dynamic>{};
+    headers.forEach((key, value) {
+      final normalized = key.toLowerCase();
+      safeHeaders[key] =
+          _sensitiveHeaders.contains(normalized) ? _redacted : value;
+    });
+    return safeHeaders;
+  }
+
+  dynamic _sanitizePayload(dynamic value) {
+    if (value == null) return value;
+
+    if (value is Map) {
+      final sanitized = <String, dynamic>{};
+      value.forEach((key, fieldValue) {
+        final keyText = key.toString();
+        final normalized = keyText.toLowerCase();
+        if (_sensitivePayloadKeys.contains(normalized)) {
+          sanitized[keyText] = _redacted;
+        } else {
+          sanitized[keyText] = _sanitizePayload(fieldValue);
+        }
+      });
+      return sanitized;
+    }
+
+    if (value is List) {
+      return value.map(_sanitizePayload).toList(growable: false);
+    }
+
+    return value;
   }
 }

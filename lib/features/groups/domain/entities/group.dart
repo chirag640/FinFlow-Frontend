@@ -1,10 +1,12 @@
 import 'package:equatable/equatable.dart';
+
 import 'group_member.dart';
 
 class Group extends Equatable {
   final String id;
   final String name;
   final String emoji;
+  final String ownerId;
   final List<GroupMember> members;
   final String currentUserId;
   final DateTime createdAt;
@@ -13,6 +15,7 @@ class Group extends Equatable {
     required this.id,
     required this.name,
     required this.emoji,
+    required this.ownerId,
     required this.members,
     required this.currentUserId,
     required this.createdAt,
@@ -23,6 +26,7 @@ class Group extends Equatable {
         id: id,
         name: name ?? this.name,
         emoji: emoji ?? this.emoji,
+        ownerId: ownerId,
         members: members ?? this.members,
         currentUserId: currentUserId,
         createdAt: createdAt,
@@ -32,6 +36,7 @@ class Group extends Equatable {
         'id': id,
         'name': name,
         'emoji': emoji,
+        'ownerId': ownerId,
         'members': members.map((m) => m.toJson()).toList(),
         'currentUserId': currentUserId,
         'createdAt': createdAt.toIso8601String(),
@@ -41,6 +46,7 @@ class Group extends Equatable {
         id: j['id'] as String,
         name: j['name'] as String,
         emoji: (j['emoji'] as String?) ?? '👥',
+        ownerId: (j['ownerId'] as String?) ?? '',
         members: (j['members'] as List)
             .map((m) => GroupMember.fromJson(m as Map<String, dynamic>))
             .toList(),
@@ -69,6 +75,7 @@ class Group extends Equatable {
       id: (j['id'] ?? j['_id']) as String,
       name: j['name'] as String,
       emoji: (j['emoji'] as String?) ?? '👥',
+      ownerId: (j['ownerId'] as String?) ?? cloudUserId,
       members: members,
       currentUserId: currentMemberId,
       createdAt: j['createdAt'] != null
@@ -78,5 +85,5 @@ class Group extends Equatable {
   }
 
   @override
-  List<Object?> get props => [id, name, members];
+  List<Object?> get props => [id, name, ownerId, members];
 }

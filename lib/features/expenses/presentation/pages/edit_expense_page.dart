@@ -1,13 +1,17 @@
 // Figma: Screen/EditExpense
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_animate/flutter_animate.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/design/app_radius.dart';
 import '../../../../core/design/components/ds_button.dart';
+import '../../../../core/network/auth_interceptor.dart';
 import '../../../../core/utils/extensions.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../../core/utils/validators.dart';
@@ -15,6 +19,9 @@ import '../../../sync/presentation/providers/sync_provider.dart';
 import '../../domain/entities/expense.dart';
 import '../../domain/entities/expense_category.dart';
 import '../providers/expense_provider.dart';
+import '../services/expense_category_suggestion_service.dart';
+import '../services/receipt_ocr_service.dart';
+import '../services/receipt_upload_service.dart';
 import '../widgets/category_picker_sheet.dart';
 import '../widgets/recurring_section_widget.dart';
 
@@ -30,12 +37,22 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
   late final TextEditingController _amountCtrl;
   late final TextEditingController _descCtrl;
   late final TextEditingController _noteCtrl;
+  final _picker = ImagePicker();
   late ExpenseCategory _category;
   late DateTime _date;
   late bool _isIncome;
   bool _isLoading = false;
+  bool _isScanningReceipt = false;
+  bool _categoryLockedByUser = true;
   late bool _isRecurring;
   late RecurringFrequency _recurringFrequency;
+  late int _recurringDueDay;
+  ExpenseCategory? _suggestedCategory;
+  String? _receiptImageBase64;
+  String? _receiptImageMimeType;
+  String? _receiptImageUrl;
+  String? _receiptStorageKey;
+  String? _receiptOcrText;
 
   @override
   void initState() {
@@ -49,6 +66,13 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
     _isIncome = e.isIncome;
     _isRecurring = e.isRecurring;
     _recurringFrequency = e.recurringFrequency ?? RecurringFrequency.monthly;
+    _recurringDueDay = e.recurringDueDay ?? e.date.day;
+    _suggestedCategory = ExpenseCategorySuggestionService.infer(e.description);
+    _receiptImageBase64 = e.receiptImageBase64;
+    _receiptImageMimeType = e.receiptImageMimeType;
+    _receiptImageUrl = e.receiptImageUrl;
+    _receiptStorageKey = e.receiptStorageKey;
+    _receiptOcrText = e.receiptOcrText;
   }
 
   @override
@@ -72,7 +96,14 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
         child: child!,
       ),
     );
-    if (picked != null) setState(() => _date = picked);
+    if (picked != null) {
+      setState(() {
+        _date = picked;
+        if (_isRecurring && _recurringFrequency == RecurringFrequency.monthly) {
+          _recurringDueDay = picked.day.clamp(1, 31);
+        }
+      });
+    }
   }
 
   void _pickCategory() {
@@ -81,9 +112,154 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
       isScrollControlled: true,
       builder: (_) => CategoryPickerSheet(
         selected: _category,
-        onSelected: (cat) => setState(() => _category = cat),
+        onSelected: (cat) => setState(() {
+          _category = cat;
+          _categoryLockedByUser = true;
+        }),
       ),
     );
+  }
+
+  void _onDescriptionChanged(String value) {
+    final suggestion = ExpenseCategorySuggestionService.infer(value);
+    setState(() {
+      _suggestedCategory = suggestion;
+      if (!_categoryLockedByUser && suggestion != null) {
+        _category = suggestion;
+      }
+    });
+  }
+
+  void _applySuggestedCategory() {
+    final suggestion = _suggestedCategory;
+    if (suggestion == null) return;
+    setState(() {
+      _category = suggestion;
+      _categoryLockedByUser = true;
+    });
+  }
+
+  Future<void> _pickReceiptSource() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Scan with Camera'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _attachReceipt(ImageSource.camera);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Choose from Gallery'),
+              onTap: () {
+                Navigator.of(ctx).pop();
+                _attachReceipt(ImageSource.gallery);
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _attachReceipt(ImageSource source) async {
+    final file = await _picker.pickImage(
+      source: source,
+      imageQuality: 70,
+      maxWidth: 1440,
+    );
+    if (file == null) return;
+
+    final bytes = await file.readAsBytes();
+    if (bytes.length > 1500000) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+              'Receipt image is too large. Please choose a smaller image.'),
+        ),
+      );
+      return;
+    }
+
+    final mimeType = _guessMimeType(file.name);
+    try {
+      final uploaded = await ReceiptUploadService.uploadReceipt(
+        dio: ref.read(dioProvider),
+        bytes: bytes,
+        fileName: file.name,
+        mimeType: mimeType,
+      );
+      if (!mounted) return;
+
+      setState(() {
+        _receiptImageBase64 = null;
+        _receiptImageMimeType = uploaded.receiptImageMimeType ?? mimeType;
+        _receiptImageUrl = uploaded.receiptImageUrl;
+        _receiptStorageKey = uploaded.receiptStorageKey;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() {
+        _receiptImageBase64 = base64Encode(bytes);
+        _receiptImageMimeType = mimeType;
+        _receiptImageUrl = null;
+        _receiptStorageKey = null;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Receipt upload unavailable right now. Using embedded fallback.',
+          ),
+        ),
+      );
+    }
+
+    await _runReceiptOcr(file.path);
+  }
+
+  Future<void> _runReceiptOcr(String imagePath) async {
+    setState(() => _isScanningReceipt = true);
+    final result = await ReceiptOcrService.scanFromImagePath(imagePath);
+    if (!mounted) return;
+
+    if (result == null) {
+      setState(() => _isScanningReceipt = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+            content: Text('No readable text found on this receipt.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _receiptOcrText = result.rawText;
+      if (_amountCtrl.text.trim().isEmpty && result.detectedAmount != null) {
+        _amountCtrl.text = result.detectedAmount!.toStringAsFixed(2);
+      }
+      if (_descCtrl.text.trim().isEmpty && result.detectedMerchant != null) {
+        _descCtrl.text = result.detectedMerchant!;
+      }
+      if (result.detectedDate != null) {
+        _date = result.detectedDate!;
+      }
+      _isScanningReceipt = false;
+    });
+    _onDescriptionChanged(_descCtrl.text);
+  }
+
+  String _guessMimeType(String fileName) {
+    final lower = fileName.toLowerCase();
+    if (lower.endsWith('.png')) return 'image/png';
+    if (lower.endsWith('.webp')) return 'image/webp';
+    if (lower.endsWith('.heic')) return 'image/heic';
+    return 'image/jpeg';
   }
 
   Future<void> _save() async {
@@ -105,10 +281,21 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
       category: _category,
       date: _date,
       note: _noteCtrl.text.isEmpty ? null : _noteCtrl.text.trim(),
+      receiptImageBase64: _receiptImageBase64,
+      receiptImageMimeType: _receiptImageMimeType,
+      receiptImageUrl: _receiptImageUrl,
+      receiptStorageKey: _receiptStorageKey,
+      receiptOcrText: _receiptOcrText,
       isIncome: _isIncome,
       isRecurring: _isRecurring,
       recurringFrequency: _isRecurring ? _recurringFrequency : null,
+      recurringDueDay:
+          _isRecurring && _recurringFrequency == RecurringFrequency.monthly
+              ? _recurringDueDay
+              : null,
       clearRecurring: !_isRecurring,
+      clearRecurringDueDay:
+          !_isRecurring || _recurringFrequency != RecurringFrequency.monthly,
     );
     await ref.read(expenseProvider.notifier).updateExpense(updated);
     syncNotifier.scheduleSync(
@@ -252,6 +439,7 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
               controller: _descCtrl,
               textCapitalization: TextCapitalization.sentences,
               textInputAction: TextInputAction.next,
+              onChanged: _onDescriptionChanged,
               style: TextStyle(
                 fontSize: R.t(16),
                 fontWeight: FontWeight.w500,
@@ -259,6 +447,33 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
               ),
               decoration: _fieldDecoration('e.g. Dinner at Mainland China'),
             ).animate(delay: 100.ms).fadeIn(duration: 300.ms),
+            if (_suggestedCategory != null) ...[
+              SizedBox(height: R.xs),
+              Row(
+                children: [
+                  Icon(
+                    Icons.auto_awesome_rounded,
+                    size: R.s(14),
+                    color: AppColors.textSecondary,
+                  ),
+                  SizedBox(width: R.xs),
+                  Expanded(
+                    child: Text(
+                      'Suggested category: ${_suggestedCategory!.label}',
+                      style: TextStyle(
+                        fontSize: R.t(12),
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (_suggestedCategory != _category)
+                    TextButton(
+                      onPressed: _applySuggestedCategory,
+                      child: const Text('Use'),
+                    ),
+                ],
+              ),
+            ],
             SizedBox(height: R.s(20)),
 
             // Category
@@ -369,14 +584,180 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
               ),
               decoration: _fieldDecoration('Add a note...'),
             ).animate(delay: 250.ms).fadeIn(duration: 300.ms),
+            SizedBox(height: R.s(20)),
+
+            _fieldLabel('RECEIPT (OPTIONAL)'),
+            SizedBox(height: R.sm),
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(R.md),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                borderRadius: BorderRadius.circular(R.s(14)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  if (_receiptImageBase64 != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(R.s(10)),
+                      child: Image.memory(
+                        base64Decode(_receiptImageBase64!),
+                        height: R.s(180),
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                      ),
+                    ),
+                  if (_receiptImageBase64 == null && _receiptImageUrl != null)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(R.s(10)),
+                      child: Image.network(
+                        _receiptImageUrl!,
+                        height: R.s(180),
+                        width: double.infinity,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Container(
+                          height: R.s(180),
+                          width: double.infinity,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHigh,
+                          alignment: Alignment.center,
+                          child: const Icon(Icons.broken_image_outlined),
+                        ),
+                      ),
+                    ),
+                  if (_receiptImageBase64 != null || _receiptImageUrl != null)
+                    SizedBox(height: R.sm),
+                  Wrap(
+                    spacing: R.s(10),
+                    runSpacing: R.s(10),
+                    children: [
+                      OutlinedButton.icon(
+                        onPressed: _pickReceiptSource,
+                        icon: Icon(
+                          (_receiptImageBase64 == null &&
+                                  _receiptImageUrl == null)
+                              ? Icons.attach_file_rounded
+                              : Icons.refresh_rounded,
+                          size: R.s(16),
+                        ),
+                        label: Text(
+                          (_receiptImageBase64 == null &&
+                                  _receiptImageUrl == null)
+                              ? 'Attach Receipt'
+                              : 'Replace Receipt',
+                        ),
+                      ),
+                      if (_receiptImageBase64 != null ||
+                          _receiptImageUrl != null)
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            setState(() {
+                              _receiptImageBase64 = null;
+                              _receiptImageMimeType = null;
+                              _receiptImageUrl = null;
+                              _receiptStorageKey = null;
+                              _receiptOcrText = null;
+                            });
+                          },
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: R.s(16),
+                          ),
+                          label: const Text('Remove'),
+                        ),
+                    ],
+                  ),
+                  if (_isScanningReceipt) ...[
+                    SizedBox(height: R.sm),
+                    const LinearProgressIndicator(minHeight: 3),
+                    SizedBox(height: R.xs),
+                    Text(
+                      'Scanning receipt text...',
+                      style: TextStyle(
+                        fontSize: R.t(12),
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ],
+                  if (_receiptOcrText != null &&
+                      _receiptOcrText!.isNotEmpty) ...[
+                    SizedBox(height: R.sm),
+                    Text(
+                      'OCR captured and attached to this expense.',
+                      style: TextStyle(
+                        fontSize: R.t(12),
+                        color: AppColors.success,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ).animate(delay: 275.ms).fadeIn(duration: 300.ms),
+            if (!_isIncome &&
+                !_isRecurring &&
+                ExpenseCategorySuggestionService.isBillLike(_category)) ...[
+              SizedBox(height: R.sm),
+              Container(
+                width: double.infinity,
+                padding: EdgeInsets.all(R.sm),
+                decoration: BoxDecoration(
+                  color: AppColors.warningLight,
+                  borderRadius: BorderRadius.circular(R.s(12)),
+                  border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.notifications_active_outlined,
+                      size: R.s(16),
+                      color: AppColors.warning,
+                    ),
+                    SizedBox(width: R.xs),
+                    Expanded(
+                      child: Text(
+                        'Turn on recurring to get bill due reminders.',
+                        style: TextStyle(
+                          fontSize: R.t(12),
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _isRecurring = true;
+                      }),
+                      child: const Text('Enable'),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             SizedBox(height: R.xl),
 
             // Recurring toggle
             RecurringSectionWidget(
               isRecurring: _isRecurring,
               frequency: _recurringFrequency,
-              onToggle: (v) => setState(() => _isRecurring = v),
-              onFrequency: (f) => setState(() => _recurringFrequency = f),
+              monthlyDueDay: _recurringDueDay,
+              onToggle: (v) => setState(() {
+                _isRecurring = v;
+                if (v && _recurringFrequency == RecurringFrequency.monthly) {
+                  _recurringDueDay = _date.day.clamp(1, 31);
+                }
+              }),
+              onFrequency: (f) => setState(() {
+                _recurringFrequency = f;
+                if (f == RecurringFrequency.monthly) {
+                  _recurringDueDay = _date.day.clamp(1, 31);
+                }
+              }),
+              onMonthlyDueDayChanged: (day) =>
+                  setState(() => _recurringDueDay = day),
               delayMs: 275,
             ),
             SizedBox(height: R.xl),

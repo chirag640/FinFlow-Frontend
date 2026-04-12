@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart' show Color;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
 
@@ -284,7 +286,7 @@ AiInsightsState _compute(ExpenseState expState) {
         emoji: '💰',
         title: 'Saving $pct% of income',
         detail:
-            'You\'re saving ₹${_fmt(totalIncome - totalSpent)} this month. Target: 20%+.',
+            'You\'re saving ${CurrencyFormatter.compact(totalIncome - totalSpent)} this month. Target: 20%+.',
         type: InsightType.good,
       ));
     } else {
@@ -304,9 +306,9 @@ AiInsightsState _compute(ExpenseState expState) {
     final daysLeft = daysInMonth - daysElapsed;
     insights.add(Insight(
       emoji: '📅',
-      title: 'Projected ₹${_fmt(projected)} by month end',
+      title: 'Projected ${CurrencyFormatter.compact(projected)} by month end',
       detail:
-          '$daysLeft days left · ₹${_fmt(avgDailySpend)}/day average · stay on track.',
+          '$daysLeft days left · ${CurrencyFormatter.compact(avgDailySpend)}/day average · stay on track.',
       type: totalIncome > 0 && projected < totalIncome
           ? InsightType.good
           : InsightType.warning,
@@ -352,7 +354,7 @@ AiInsightsState _compute(ExpenseState expState) {
       emoji: a.category.emoji,
       title: '${a.category.label} spiked ${a.ratio.toStringAsFixed(1)}×',
       detail:
-          '₹${_fmt(a.thisMonth)} this month vs ₹${_fmt(a.rollingAvg)} average. Worth reviewing.',
+          '${CurrencyFormatter.compact(a.thisMonth)} this month vs ${CurrencyFormatter.compact(a.rollingAvg)} average. Worth reviewing.',
       type: a.ratio >= 2.5 ? InsightType.danger : InsightType.warning,
     ));
   }
@@ -364,7 +366,8 @@ AiInsightsState _compute(ExpenseState expState) {
     insights.add(Insight(
       emoji: '📊',
       title: '${topCat!.label} is your top category',
-      detail: '₹${_fmt(topAmt)} — $pct% of total spending this month.',
+      detail:
+          '${CurrencyFormatter.compact(topAmt)} — $pct% of total spending this month.',
       type: InsightType.neutral,
     ));
   }
@@ -374,7 +377,8 @@ AiInsightsState _compute(ExpenseState expState) {
     insights.add(Insight(
       emoji: '💼',
       title: '${income.length} income entries this month',
-      detail: 'Multiple income sources recorded. Total: ₹${_fmt(totalIncome)}.',
+      detail:
+          'Multiple income sources recorded. Total: ${CurrencyFormatter.compact(totalIncome)}.',
       type: InsightType.good,
     ));
   }
@@ -387,10 +391,4 @@ AiInsightsState _compute(ExpenseState expState) {
     habitStreakDays: streakDays,
     hourlyPattern: hourlyPattern,
   );
-}
-
-String _fmt(double v) {
-  if (v >= 100000) return '${(v / 100000).toStringAsFixed(1)}L';
-  if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
-  return v.toStringAsFixed(0);
 }

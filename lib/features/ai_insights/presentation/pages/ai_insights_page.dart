@@ -417,7 +417,7 @@ class _AnomalyCard extends StatelessWidget {
                 ),
                 SizedBox(height: R.xs),
                 Text(
-                  '₹${_fmtNum(thisMonth)} this month  ·  avg ₹${_fmtNum(rollingAvg)}',
+                  '${CurrencyFormatter.compact(thisMonth)} this month  ·  avg ${CurrencyFormatter.compact(rollingAvg)}',
                   style: TextStyle(
                     fontSize: R.t(12),
                     color: AppColors.textSecondary,
@@ -444,12 +444,6 @@ class _AnomalyCard extends StatelessWidget {
         ],
       ),
     );
-  }
-
-  String _fmtNum(double v) {
-    if (v >= 100000) return '${(v / 100000).toStringAsFixed(1)}L';
-    if (v >= 1000) return '${(v / 1000).toStringAsFixed(1)}K';
-    return v.toStringAsFixed(0);
   }
 }
 

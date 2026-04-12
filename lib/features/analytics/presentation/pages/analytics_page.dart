@@ -8,10 +8,242 @@ import 'package:intl/intl.dart';
 
 import '../../../../core/design/app_colors.dart';
 import '../../../../core/theme/radius.dart';
+import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../../expenses/domain/entities/expense.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../services/tax_deduction_service.dart';
+
+// ── Day x Hour Heatmap ───────────────────────────────────────────────────────
+class _DayHourHeatmap extends StatefulWidget {
+  final List<Expense> expenses;
+  const _DayHourHeatmap({required this.expenses});
+
+  @override
+  State<_DayHourHeatmap> createState() => _DayHourHeatmapState();
+}
+
+class _DayHourHeatmapState extends State<_DayHourHeatmap> {
+  int? _selectedDay;
+  int? _selectedHour;
+
+  static const List<String> _dayLabels = [
+    'Mon',
+    'Tue',
+    'Wed',
+    'Thu',
+    'Fri',
+    'Sat',
+    'Sun',
+  ];
+
+  String _hourLabel(int hour) {
+    if (hour == 0) return '12a';
+    if (hour < 12) return '${hour}a';
+    if (hour == 12) return '12p';
+    return '${hour - 12}p';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+
+    final matrix = List.generate(7, (_) => List<double>.filled(24, 0));
+    for (final expense in widget.expenses) {
+      final dayIndex = expense.date.weekday - 1;
+      final hourIndex = expense.date.hour;
+      matrix[dayIndex][hourIndex] += expense.amount;
+    }
+
+    var maxValue = 0.0;
+    for (final row in matrix) {
+      for (final value in row) {
+        if (value > maxValue) {
+          maxValue = value;
+        }
+      }
+    }
+
+    final selectedAmount = (_selectedDay != null && _selectedHour != null)
+        ? matrix[_selectedDay!][_selectedHour!]
+        : null;
+
+    Color cellColor(double amount) {
+      if (amount <= 0 || maxValue <= 0) {
+        return AppColors.border.withValues(alpha: 0.45);
+      }
+      final ratio = (amount / maxValue).clamp(0.0, 1.0);
+      if (ratio < 0.2) return AppColors.accent.withValues(alpha: 0.22);
+      if (ratio < 0.4) return AppColors.accent.withValues(alpha: 0.38);
+      if (ratio < 0.6) return AppColors.accent.withValues(alpha: 0.56);
+      if (ratio < 0.8) return AppColors.accent.withValues(alpha: 0.76);
+      return AppColors.accent;
+    }
+
+    final fmt =
+        NumberFormat.currency(locale: 'en_IN', symbol: '₹', decimalDigits: 0);
+    final cellSize = R.s(13);
+    final cellGap = R.xs;
+    final labelWidth = R.s(28);
+    final headerHeight = R.s(18);
+
+    return Container(
+      padding: EdgeInsets.all(R.s(14)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).colorScheme.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: AppColors.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    SizedBox(width: labelWidth, height: headerHeight),
+                    for (int hour = 0; hour < 24; hour++)
+                      Container(
+                        width: cellSize,
+                        margin: EdgeInsets.only(right: cellGap),
+                        alignment: Alignment.center,
+                        child: Text(
+                          hour % 3 == 0 ? _hourLabel(hour) : '',
+                          style: TextStyle(
+                            fontSize: R.t(9),
+                            color: AppColors.textTertiary,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                for (int day = 0; day < 7; day++)
+                  Padding(
+                    padding: EdgeInsets.only(top: R.xs),
+                    child: Row(
+                      children: [
+                        SizedBox(
+                          width: labelWidth,
+                          child: Text(
+                            _dayLabels[day],
+                            style: TextStyle(
+                              fontSize: R.t(10),
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
+                        ),
+                        for (int hour = 0; hour < 24; hour++)
+                          GestureDetector(
+                            onTap: () {
+                              setState(() {
+                                if (_selectedDay == day &&
+                                    _selectedHour == hour) {
+                                  _selectedDay = null;
+                                  _selectedHour = null;
+                                } else {
+                                  _selectedDay = day;
+                                  _selectedHour = hour;
+                                }
+                              });
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 120),
+                              width: cellSize,
+                              height: cellSize,
+                              margin: EdgeInsets.only(right: cellGap),
+                              decoration: BoxDecoration(
+                                color: cellColor(matrix[day][hour]),
+                                borderRadius: AppRadius.xxs,
+                                border:
+                                    _selectedDay == day && _selectedHour == hour
+                                        ? Border.all(
+                                            color: AppColors.primary,
+                                            width: 1.2,
+                                          )
+                                        : null,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          if (_selectedDay != null && _selectedHour != null) ...[
+            Gap(R.s(10)),
+            Container(
+              padding:
+                  EdgeInsets.symmetric(horizontal: R.s(12), vertical: R.sm),
+              decoration: BoxDecoration(
+                color: AppColors.darkSurface,
+                borderRadius: AppRadius.smPlus,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '${_dayLabels[_selectedDay!]} · ${_hourLabel(_selectedHour!)}',
+                    style: TextStyle(color: Colors.white70, fontSize: R.t(12)),
+                  ),
+                  const Gap(10),
+                  Text(
+                    (selectedAmount ?? 0) > 0
+                        ? fmt.format(selectedAmount)
+                        : 'No spending',
+                    style: TextStyle(
+                      color: (selectedAmount ?? 0) > 0
+                          ? Colors.white
+                          : Colors.white38,
+                      fontWeight: FontWeight.w700,
+                      fontSize: R.t(12),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+          Gap(R.s(10)),
+          Row(children: [
+            Text(
+              'Less',
+              style:
+                  TextStyle(fontSize: R.t(10), color: AppColors.textTertiary),
+            ),
+            const Gap(6),
+            for (int i = 0; i < 5; i++)
+              Padding(
+                padding: const EdgeInsets.only(right: 3),
+                child: Container(
+                  width: R.s(10),
+                  height: R.s(10),
+                  decoration: BoxDecoration(
+                    color: i == 0
+                        ? AppColors.border.withValues(alpha: 0.45)
+                        : AppColors.accent
+                            .withValues(alpha: [0.22, 0.38, 0.56, 1.0][i - 1]),
+                    borderRadius: AppRadius.xxs,
+                  ),
+                ),
+              ),
+            const Gap(6),
+            Text(
+              'More',
+              style:
+                  TextStyle(fontSize: R.t(10), color: AppColors.textTertiary),
+            ),
+          ]),
+        ],
+      ),
+    );
+  }
+}
 
 class AnalyticsPage extends ConsumerStatefulWidget {
   const AnalyticsPage({super.key});
@@ -62,6 +294,10 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               e.date.month == i + 1)
           .fold<double>(0, (s, e) => s + e.amount);
     });
+
+    final forecast = _forecastNextQuarter(monthly, _selectedYear);
+    final monthlyAnomalies = _detectMonthlyAnomalies(monthly, _selectedYear);
+    final taxSummary = TaxDeductionService.summarize(yearExpenses);
 
     return Scaffold(
       backgroundColor: Theme.of(context).scaffoldBackgroundColor,
@@ -154,6 +390,14 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ).animate().fadeIn(delay: 200.ms),
                 const Gap(20),
 
+                _SectionHeader(title: 'Forecast & Anomalies'),
+                const Gap(12),
+                _ForecastAnomalySection(
+                  forecasts: forecast,
+                  anomalies: monthlyAnomalies,
+                ).animate().fadeIn(delay: 220.ms),
+                const Gap(20),
+
                 // Income vs Expenses comparison
                 _SectionHeader(title: 'Income vs Expenses'),
                 const Gap(12),
@@ -172,6 +416,13 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                       .fadeIn(delay: 250.ms),
                   const Gap(20),
                 ],
+
+                _SectionHeader(title: 'Tax & Deductions'),
+                const Gap(12),
+                _TaxDeductionSection(summary: taxSummary)
+                    .animate()
+                    .fadeIn(delay: 270.ms),
+                const Gap(20),
 
                 // Category breakdown list
                 if (sorted.isNotEmpty) ...[
@@ -221,6 +472,20 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
                 ).animate().fadeIn(delay: 600.ms),
                 const Gap(20),
 
+                // Day x hour spending heatmap
+                _SectionHeader(title: 'Spending Heatmap by Day and Hour'),
+                const Gap(4),
+                Text(
+                  '$_selectedYear · spot peak weekdays and time windows',
+                  style: TextStyle(
+                      fontSize: R.t(11), color: colors.onSurfaceVariant),
+                ),
+                const Gap(12),
+                _DayHourHeatmap(expenses: yearExpenses)
+                    .animate()
+                    .fadeIn(delay: 650.ms),
+                const Gap(20),
+
                 // Day-of-week spending pattern
                 _SectionHeader(title: 'Spending by Day of Week'),
                 const Gap(4),
@@ -238,6 +503,283 @@ class _AnalyticsPageState extends ConsumerState<AnalyticsPage> {
               ]),
             ),
           ),
+        ],
+      ),
+    );
+  }
+
+  List<_ForecastPoint> _forecastNextQuarter(List<double> monthly, int year) {
+    final nonZero = monthly.where((v) => v > 0).toList();
+    if (nonZero.isEmpty) return const [];
+
+    final currentMonth = DateTime.now().month;
+    final last = monthly[(currentMonth - 1).clamp(0, 11).toInt()];
+    final prev = monthly[(currentMonth - 2).clamp(0, 11).toInt()];
+    final prev2 = monthly[(currentMonth - 3).clamp(0, 11).toInt()];
+    var baseline = (last * 0.5) + (prev * 0.3) + (prev2 * 0.2);
+    if (baseline <= 0) {
+      baseline = nonZero.fold(0.0, (sum, v) => sum + v) / nonZero.length;
+    }
+
+    final results = <_ForecastPoint>[];
+    for (int i = 1; i <= 3; i++) {
+      final monthNumber = ((currentMonth - 1 + i) % 12) + 1;
+      final predicted = baseline * (1 + (0.03 * i));
+      results.add(
+        _ForecastPoint(
+          monthLabel: DateFormat('MMM').format(DateTime(year, monthNumber, 1)),
+          amount: predicted,
+        ),
+      );
+      baseline = (baseline * 0.8) + (predicted * 0.2);
+    }
+    return results;
+  }
+
+  List<_MonthlyAnomalySignal> _detectMonthlyAnomalies(
+    List<double> monthly,
+    int year,
+  ) {
+    final anomalies = <_MonthlyAnomalySignal>[];
+
+    for (int i = 3; i < monthly.length; i++) {
+      final current = monthly[i];
+      if (current <= 0) continue;
+
+      final trailingWindow = monthly.sublist(i - 3, i).where((v) => v > 0);
+      if (trailingWindow.isEmpty) continue;
+
+      final trailingAvg = trailingWindow.fold(0.0, (sum, v) => sum + v) /
+          trailingWindow.length;
+      if (trailingAvg <= 0) continue;
+
+      final ratio = current / trailingAvg;
+      if (ratio >= 1.4 && current - trailingAvg >= 1000) {
+        anomalies.add(
+          _MonthlyAnomalySignal(
+            monthLabel: DateFormat('MMM').format(DateTime(year, i + 1, 1)),
+            amount: current,
+            trailingAverage: trailingAvg,
+            ratio: ratio,
+          ),
+        );
+      }
+    }
+
+    anomalies.sort((a, b) => b.ratio.compareTo(a.ratio));
+    return anomalies;
+  }
+}
+
+class _ForecastPoint {
+  final String monthLabel;
+  final double amount;
+
+  const _ForecastPoint({required this.monthLabel, required this.amount});
+}
+
+class _MonthlyAnomalySignal {
+  final String monthLabel;
+  final double amount;
+  final double trailingAverage;
+  final double ratio;
+
+  const _MonthlyAnomalySignal({
+    required this.monthLabel,
+    required this.amount,
+    required this.trailingAverage,
+    required this.ratio,
+  });
+}
+
+class _ForecastAnomalySection extends StatelessWidget {
+  final List<_ForecastPoint> forecasts;
+  final List<_MonthlyAnomalySignal> anomalies;
+
+  const _ForecastAnomalySection({
+    required this.forecasts,
+    required this.anomalies,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colors = Theme.of(context).colorScheme;
+
+    return Container(
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            forecasts.isEmpty
+                ? 'Not enough history for a forecast yet.'
+                : 'Projected next 3 months',
+            style: TextStyle(
+              fontSize: R.t(12),
+              fontWeight: FontWeight.w700,
+              color: colors.onSurface,
+            ),
+          ),
+          SizedBox(height: R.s(10)),
+          if (forecasts.isNotEmpty)
+            Wrap(
+              spacing: R.s(8),
+              runSpacing: R.s(8),
+              children: forecasts
+                  .map(
+                    (point) => Container(
+                      padding: EdgeInsets.symmetric(
+                        horizontal: R.s(10),
+                        vertical: R.s(8),
+                      ),
+                      decoration: BoxDecoration(
+                        color: colors.primaryContainer,
+                        borderRadius: BorderRadius.circular(R.s(10)),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            point.monthLabel,
+                            style: TextStyle(
+                              fontSize: R.t(10),
+                              color: colors.onPrimaryContainer,
+                            ),
+                          ),
+                          Text(
+                            CurrencyFormatter.compact(point.amount),
+                            style: TextStyle(
+                              fontSize: R.t(12),
+                              fontWeight: FontWeight.w800,
+                              color: colors.onPrimaryContainer,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  )
+                  .toList(),
+            ),
+          SizedBox(height: R.s(12)),
+          Text(
+            'Anomaly signals',
+            style: TextStyle(
+              fontSize: R.t(12),
+              fontWeight: FontWeight.w700,
+              color: colors.onSurface,
+            ),
+          ),
+          SizedBox(height: R.xs),
+          if (anomalies.isEmpty)
+            Text(
+              'No unusual month-over-month spikes detected.',
+              style: TextStyle(
+                fontSize: R.t(11),
+                color: colors.onSurfaceVariant,
+              ),
+            )
+          else
+            ...anomalies.take(3).map(
+                  (signal) => Padding(
+                    padding: EdgeInsets.only(bottom: R.xs),
+                    child: Text(
+                      '${signal.monthLabel}: ${signal.ratio.toStringAsFixed(1)}x vs trailing avg (${CurrencyFormatter.compact(signal.amount)} vs ${CurrencyFormatter.compact(signal.trailingAverage)})',
+                      style: TextStyle(
+                        fontSize: R.t(11),
+                        color: AppColors.warning,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                ),
+        ],
+      ),
+    );
+  }
+}
+
+class _TaxDeductionSection extends StatelessWidget {
+  final TaxDeductionSummary summary;
+
+  const _TaxDeductionSection({required this.summary});
+
+  @override
+  Widget build(BuildContext context) {
+    R.init(context);
+    final colors = Theme.of(context).colorScheme;
+    final topEntries = summary.deductibleByCategory.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      padding: EdgeInsets.all(R.md),
+      decoration: BoxDecoration(
+        color: colors.surface,
+        borderRadius: BorderRadius.circular(R.md),
+        border: Border.all(color: colors.outlineVariant),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Estimated deductible spend',
+            style: TextStyle(
+              fontSize: R.t(12),
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          SizedBox(height: R.xs),
+          Text(
+            CurrencyFormatter.format(summary.estimatedDeductible),
+            style: TextStyle(
+              fontSize: R.t(22),
+              fontWeight: FontWeight.w800,
+              color: AppColors.success,
+            ),
+          ),
+          SizedBox(height: R.xs),
+          Text(
+            '${(summary.deductibleRatio * 100).toStringAsFixed(0)}% of annual spend currently maps to deduction-friendly categories.',
+            style: TextStyle(
+              fontSize: R.t(11),
+              color: colors.onSurfaceVariant,
+            ),
+          ),
+          if (topEntries.isNotEmpty) ...[
+            SizedBox(height: R.s(10)),
+            ...topEntries.take(4).map(
+                  (entry) => Padding(
+                    padding: EdgeInsets.only(bottom: R.xs),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            entry.key.label,
+                            style: TextStyle(
+                              fontSize: R.t(11),
+                              fontWeight: FontWeight.w600,
+                              color: colors.onSurface,
+                            ),
+                          ),
+                        ),
+                        Text(
+                          CurrencyFormatter.format(entry.value),
+                          style: TextStyle(
+                            fontSize: R.t(11),
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.success,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+          ],
         ],
       ),
     );

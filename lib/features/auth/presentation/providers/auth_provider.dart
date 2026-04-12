@@ -233,6 +233,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
   /// Called after a successful biometric prompt on lock screen.
   void unlockWithBiometric() {
     if (!state.hasPin) return;
+    _failedPinAttempts = 0;
+    _pinLockedUntil = null;
     state = state.copyWith(isAuthenticated: true, error: null);
   }
 

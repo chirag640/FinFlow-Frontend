@@ -60,30 +60,140 @@ class SyncMetrics {
   }
 }
 
+class SyncConflictSummary {
+  final List<String> expensePendingUpserts;
+  final List<String> expensePendingDeletions;
+  final List<String> budgetPendingUpserts;
+  final List<String> budgetPendingDeletions;
+  final List<String> goalPendingUpserts;
+  final List<String> goalPendingDeletions;
+
+  const SyncConflictSummary({
+    this.expensePendingUpserts = const [],
+    this.expensePendingDeletions = const [],
+    this.budgetPendingUpserts = const [],
+    this.budgetPendingDeletions = const [],
+    this.goalPendingUpserts = const [],
+    this.goalPendingDeletions = const [],
+  });
+
+  int get total =>
+      expensePendingUpserts.length +
+      expensePendingDeletions.length +
+      budgetPendingUpserts.length +
+      budgetPendingDeletions.length +
+      goalPendingUpserts.length +
+      goalPendingDeletions.length;
+
+  bool get hasConflicts => total > 0;
+}
+
+enum SyncConflictEntityType { expense, budget, goal }
+
+enum SyncConflictActionType { upsert, deletion }
+
+class SyncConflictRecord {
+  final String id;
+  final SyncConflictEntityType entityType;
+  final SyncConflictActionType actionType;
+  final Map<String, dynamic>? localData;
+  final Map<String, dynamic>? cloudData;
+  final DateTime? localUpdatedAt;
+  final DateTime? cloudUpdatedAt;
+  final bool cloudSnapshotAvailable;
+  final List<String> changedFields;
+
+  const SyncConflictRecord({
+    required this.id,
+    required this.entityType,
+    required this.actionType,
+    required this.localData,
+    required this.cloudData,
+    required this.localUpdatedAt,
+    required this.cloudUpdatedAt,
+    required this.cloudSnapshotAvailable,
+    required this.changedFields,
+  });
+}
+
+class SyncCircuitStatus {
+  final int consecutiveFullFailures;
+  final int consecutivePullFailures;
+  final int fullFailureThreshold;
+  final int pullFailureThreshold;
+  final DateTime? fullOpenUntil;
+  final DateTime? pullOpenUntil;
+
+  const SyncCircuitStatus({
+    this.consecutiveFullFailures = 0,
+    this.consecutivePullFailures = 0,
+    this.fullFailureThreshold = 3,
+    this.pullFailureThreshold = 5,
+    this.fullOpenUntil,
+    this.pullOpenUntil,
+  });
+
+  bool get isFullOpen =>
+      fullOpenUntil != null && DateTime.now().isBefore(fullOpenUntil!);
+
+  bool get isPullOpen =>
+      pullOpenUntil != null && DateTime.now().isBefore(pullOpenUntil!);
+
+  bool get hasOpenCircuit => isFullOpen || isPullOpen;
+
+  Duration? get fullOpenRemaining {
+    if (!isFullOpen || fullOpenUntil == null) return null;
+    return fullOpenUntil!.difference(DateTime.now());
+  }
+
+  Duration? get pullOpenRemaining {
+    if (!isPullOpen || pullOpenUntil == null) return null;
+    return pullOpenUntil!.difference(DateTime.now());
+  }
+}
+
 class SyncState {
   final bool isSyncing;
   final DateTime? lastSyncTime;
   final String? error;
   final SyncMetrics metrics;
+  final SyncCircuitStatus circuitStatus;
 
   const SyncState({
     this.isSyncing = false,
     this.lastSyncTime,
     this.error,
     this.metrics = const SyncMetrics(),
+    this.circuitStatus = const SyncCircuitStatus(),
   });
 
   SyncState copyWith(
           {bool? isSyncing,
           DateTime? lastSyncTime,
           String? error,
-          SyncMetrics? metrics}) =>
+          SyncMetrics? metrics,
+          SyncCircuitStatus? circuitStatus}) =>
       SyncState(
         isSyncing: isSyncing ?? this.isSyncing,
         lastSyncTime: lastSyncTime ?? this.lastSyncTime,
         error: error,
         metrics: metrics ?? this.metrics,
+        circuitStatus: circuitStatus ?? this.circuitStatus,
       );
+}
+
+class _ConflictCloudSnapshot {
+  final bool available;
+  final Map<String, Map<String, dynamic>> expenses;
+  final Map<String, Map<String, dynamic>> budgets;
+  final Map<String, Map<String, dynamic>> goals;
+
+  const _ConflictCloudSnapshot({
+    required this.available,
+    this.expenses = const {},
+    this.budgets = const {},
+    this.goals = const {},
+  });
 }
 
 // ── Notifier ──────────────────────────────────────────────────────────────────
@@ -116,6 +226,10 @@ class SyncNotifier extends StateNotifier<SyncState> {
   static const _foregroundPullJitterRatio = 0.20;
   static const _lastSyncStorageKey = 'ff_last_sync_time_utc';
   static const _sampleWindow = 100;
+  static const _fullFailureThreshold = 3;
+  static const _pullFailureThreshold = 5;
+  static const _fullCircuitDuration = Duration(seconds: 45);
+  static const _pullCircuitDuration = Duration(seconds: 30);
 
   int _consecutiveFullFailures = 0;
   int _consecutivePullFailures = 0;
@@ -293,6 +407,481 @@ class SyncNotifier extends StateNotifier<SyncState> {
         goalDs.getPendingDeletions().isNotEmpty;
   }
 
+  int _currentQueueDepth() {
+    final expDs = _ref.read(expenseDatasourceProvider);
+    final budgetDs = _ref.read(budgetDatasourceProvider);
+    final goalDs = _ref.read(goalDatasourceProvider);
+
+    return expDs.getPendingDeletions().length +
+        expDs.getPendingUpserts().length +
+        budgetDs.getPendingUpserts().length +
+        budgetDs.getPendingDeletions().length +
+        goalDs.getPendingUpserts().length +
+        goalDs.getPendingDeletions().length;
+  }
+
+  SyncConflictSummary getLocalConflictSummary() {
+    final expDs = _ref.read(expenseDatasourceProvider);
+    final budgetDs = _ref.read(budgetDatasourceProvider);
+    final goalDs = _ref.read(goalDatasourceProvider);
+
+    return SyncConflictSummary(
+      expensePendingUpserts: expDs.getPendingUpserts(),
+      expensePendingDeletions: expDs.getPendingDeletions(),
+      budgetPendingUpserts: budgetDs.getPendingUpserts(),
+      budgetPendingDeletions: budgetDs.getPendingDeletions(),
+      goalPendingUpserts: goalDs.getPendingUpserts(),
+      goalPendingDeletions: goalDs.getPendingDeletions(),
+    );
+  }
+
+  Future<void> discardPendingLocalChanges() async {
+    final expDs = _ref.read(expenseDatasourceProvider);
+    final budgetDs = _ref.read(budgetDatasourceProvider);
+    final goalDs = _ref.read(goalDatasourceProvider);
+
+    await Future.wait([
+      expDs.clearAllPendingUpserts(),
+      expDs.clearAllPendingDeletions(),
+      budgetDs.clearAllPendingUpserts(),
+      budgetDs.clearAllPendingDeletions(),
+      goalDs.clearAllPendingUpserts(),
+      goalDs.clearAllPendingDeletions(),
+    ]);
+
+    _updateMetrics(queueDepth: 0);
+    state = state.copyWith(error: null);
+    schedulePull(reason: 'conflict-discard-local', delay: Duration.zero);
+  }
+
+  Future<List<SyncConflictRecord>> buildConflictRecords() async {
+    final summary = getLocalConflictSummary();
+    final expDs = _ref.read(expenseDatasourceProvider);
+    final budgetDs = _ref.read(budgetDatasourceProvider);
+    final goalDs = _ref.read(goalDatasourceProvider);
+
+    final localExpenses = {
+      for (final expense in expDs.getAll()) expense.id: expense.toJson(),
+    };
+    final localBudgets = {
+      for (final budget in budgetDs.getAll()) budget.id: budget.toJson(),
+    };
+    final localGoals = {
+      for (final goal in goalDs.getAll()) goal.id: goal.toJson(),
+    };
+
+    final cloudSnapshot = await _fetchConflictCloudSnapshot();
+    final records = <SyncConflictRecord>[];
+
+    for (final id in summary.expensePendingUpserts.toSet()) {
+      records.add(
+        _buildConflictRecord(
+          id: id,
+          entityType: SyncConflictEntityType.expense,
+          actionType: SyncConflictActionType.upsert,
+          localData: localExpenses[id],
+          cloudData:
+              cloudSnapshot.available ? cloudSnapshot.expenses[id] : null,
+          cloudSnapshotAvailable: cloudSnapshot.available,
+        ),
+      );
+    }
+    for (final id in summary.expensePendingDeletions.toSet()) {
+      records.add(
+        _buildConflictRecord(
+          id: id,
+          entityType: SyncConflictEntityType.expense,
+          actionType: SyncConflictActionType.deletion,
+          localData: localExpenses[id],
+          cloudData:
+              cloudSnapshot.available ? cloudSnapshot.expenses[id] : null,
+          cloudSnapshotAvailable: cloudSnapshot.available,
+        ),
+      );
+    }
+
+    for (final id in summary.budgetPendingUpserts.toSet()) {
+      records.add(
+        _buildConflictRecord(
+          id: id,
+          entityType: SyncConflictEntityType.budget,
+          actionType: SyncConflictActionType.upsert,
+          localData: localBudgets[id],
+          cloudData: cloudSnapshot.available ? cloudSnapshot.budgets[id] : null,
+          cloudSnapshotAvailable: cloudSnapshot.available,
+        ),
+      );
+    }
+    for (final id in summary.budgetPendingDeletions.toSet()) {
+      records.add(
+        _buildConflictRecord(
+          id: id,
+          entityType: SyncConflictEntityType.budget,
+          actionType: SyncConflictActionType.deletion,
+          localData: localBudgets[id],
+          cloudData: cloudSnapshot.available ? cloudSnapshot.budgets[id] : null,
+          cloudSnapshotAvailable: cloudSnapshot.available,
+        ),
+      );
+    }
+
+    for (final id in summary.goalPendingUpserts.toSet()) {
+      records.add(
+        _buildConflictRecord(
+          id: id,
+          entityType: SyncConflictEntityType.goal,
+          actionType: SyncConflictActionType.upsert,
+          localData: localGoals[id],
+          cloudData: cloudSnapshot.available ? cloudSnapshot.goals[id] : null,
+          cloudSnapshotAvailable: cloudSnapshot.available,
+        ),
+      );
+    }
+    for (final id in summary.goalPendingDeletions.toSet()) {
+      records.add(
+        _buildConflictRecord(
+          id: id,
+          entityType: SyncConflictEntityType.goal,
+          actionType: SyncConflictActionType.deletion,
+          localData: localGoals[id],
+          cloudData: cloudSnapshot.available ? cloudSnapshot.goals[id] : null,
+          cloudSnapshotAvailable: cloudSnapshot.available,
+        ),
+      );
+    }
+
+    records.sort((a, b) {
+      final typeCompare = _entitySortOrder(a.entityType)
+          .compareTo(_entitySortOrder(b.entityType));
+      if (typeCompare != 0) return typeCompare;
+      final actionCompare = a.actionType.index.compareTo(b.actionType.index);
+      if (actionCompare != 0) return actionCompare;
+      return a.id.compareTo(b.id);
+    });
+    return records;
+  }
+
+  Future<void> preferCloudForConflict(SyncConflictRecord record) async {
+    final cloudSnapshot = await _fetchConflictCloudSnapshot();
+    if (!cloudSnapshot.available) {
+      state = state.copyWith(
+        error:
+            'Unable to load cloud snapshot. Reconnect and try conflict merge again.',
+      );
+      return;
+    }
+
+    final cloudData = switch (record.entityType) {
+      SyncConflictEntityType.expense => cloudSnapshot.expenses[record.id],
+      SyncConflictEntityType.budget => cloudSnapshot.budgets[record.id],
+      SyncConflictEntityType.goal => cloudSnapshot.goals[record.id],
+    };
+
+    await _clearPendingForRecord(record.entityType, record.id);
+    await _applyCloudSnapshotForRecord(record.entityType, record.id, cloudData);
+
+    _updateMetrics(queueDepth: _currentQueueDepth());
+    state = state.copyWith(error: null);
+    schedulePull(reason: 'conflict-prefer-cloud', delay: Duration.zero);
+  }
+
+  Future<void> retryNow({bool pullOnly = false}) async {
+    _consecutiveFullFailures = 0;
+    _consecutivePullFailures = 0;
+    _fullCircuitOpenUntil = null;
+    _pullCircuitOpenUntil = null;
+    _publishCircuitStatus();
+
+    if (pullOnly) {
+      await sync(pushChanges: false, showSyncingState: false);
+      return;
+    }
+    await sync();
+  }
+
+  SyncConflictRecord _buildConflictRecord({
+    required String id,
+    required SyncConflictEntityType entityType,
+    required SyncConflictActionType actionType,
+    required Map<String, dynamic>? localData,
+    required Map<String, dynamic>? cloudData,
+    required bool cloudSnapshotAvailable,
+  }) {
+    return SyncConflictRecord(
+      id: id,
+      entityType: entityType,
+      actionType: actionType,
+      localData: localData,
+      cloudData: cloudData,
+      localUpdatedAt: _parseDateTime(localData?['updatedAt']),
+      cloudUpdatedAt: _parseDateTime(cloudData?['updatedAt']),
+      cloudSnapshotAvailable: cloudSnapshotAvailable,
+      changedFields: _diffFields(localData, cloudData),
+    );
+  }
+
+  Future<_ConflictCloudSnapshot> _fetchConflictCloudSnapshot() async {
+    final token = await _storage.read(key: TokenKeys.accessToken);
+    final isOnline = _ref.read(connectivityProvider);
+    if (token == null || !isOnline) {
+      return const _ConflictCloudSnapshot(available: false);
+    }
+
+    try {
+      final dio = _ref.read(dioProvider);
+      final pullRes = await dio.get(
+        ApiEndpoints.syncPull,
+        queryParameters: {'syncVersion': _syncVersion},
+      );
+      final pullData = pullRes.data is Map<String, dynamic>
+          ? pullRes.data['data'] as Map<String, dynamic>?
+          : null;
+
+      final expenseMap = <String, Map<String, dynamic>>{};
+      final budgetMap = <String, Map<String, dynamic>>{};
+      final goalMap = <String, Map<String, dynamic>>{};
+
+      for (final raw in (pullData?['expenses'] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final normalized =
+            _normalizeServerExpenseRecord(raw.cast<String, dynamic>());
+        if (normalized == null) continue;
+        expenseMap[normalized['id'] as String] = normalized;
+      }
+
+      for (final raw in (pullData?['budgets'] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final normalized =
+            _normalizeServerBudgetRecord(raw.cast<String, dynamic>());
+        if (normalized == null) continue;
+        budgetMap[normalized['id'] as String] = normalized;
+      }
+
+      for (final raw in (pullData?['goals'] as List?) ?? const []) {
+        if (raw is! Map) continue;
+        final normalized =
+            _normalizeServerGoalRecord(raw.cast<String, dynamic>());
+        if (normalized == null) continue;
+        goalMap[normalized['id'] as String] = normalized;
+      }
+
+      return _ConflictCloudSnapshot(
+        available: true,
+        expenses: expenseMap,
+        budgets: budgetMap,
+        goals: goalMap,
+      );
+    } catch (_) {
+      return const _ConflictCloudSnapshot(available: false);
+    }
+  }
+
+  Map<String, dynamic>? _normalizeServerExpenseRecord(
+    Map<String, dynamic> raw,
+  ) {
+    final id = raw['id'] as String?;
+    if (id == null) return null;
+
+    if (raw['deleted'] == true) {
+      return {
+        'id': id,
+        'deleted': true,
+        'updatedAt': _toIsoString(raw['updatedAt']),
+      };
+    }
+
+    return {
+      'id': id,
+      'amount': (raw['amount'] as num?)?.toDouble() ?? 0,
+      'description': raw['description'] as String? ?? '',
+      'category': raw['category'] as String? ?? 'other',
+      'date': _toIsoString(raw['date']),
+      'note': raw['notes'],
+      'receiptImageBase64': raw['receiptImageBase64'],
+      'receiptImageMimeType': raw['receiptImageMimeType'],
+      'receiptImageUrl': raw['receiptImageUrl'],
+      'receiptStorageKey': raw['receiptStorageKey'],
+      'receiptOcrText': raw['receiptOcrText'],
+      'isIncome': raw['isIncome'] == true,
+      'isRecurring': raw['isRecurring'] == true,
+      'recurringFrequency': raw['recurringRule'],
+      'recurringDueDay': (raw['recurringDueDay'] as num?)?.toInt(),
+      'updatedAt': _toIsoString(raw['updatedAt']),
+    };
+  }
+
+  Map<String, dynamic>? _normalizeServerBudgetRecord(
+    Map<String, dynamic> raw,
+  ) {
+    final id = raw['id'] as String?;
+    if (id == null) return null;
+
+    if (raw['deleted'] == true) {
+      return {
+        'id': id,
+        'deleted': true,
+        'updatedAt': _toIsoString(raw['updatedAt']),
+      };
+    }
+
+    return {
+      'id': id,
+      'categoryKey': raw['categoryKey'] as String? ?? '',
+      'allocatedAmount': (raw['allocatedAmount'] as num?)?.toDouble() ?? 0,
+      'month': (raw['month'] as num?)?.toInt() ?? 1,
+      'year': (raw['year'] as num?)?.toInt() ?? DateTime.now().year,
+      'carryForward': raw['carryForward'] == true,
+      'updatedAt': _toIsoString(raw['updatedAt']),
+    };
+  }
+
+  Map<String, dynamic>? _normalizeServerGoalRecord(
+    Map<String, dynamic> raw,
+  ) {
+    final id = raw['id'] as String?;
+    if (id == null) return null;
+
+    if (raw['deleted'] == true) {
+      return {
+        'id': id,
+        'deleted': true,
+        'updatedAt': _toIsoString(raw['updatedAt']),
+      };
+    }
+
+    final deadline = raw['deadline'];
+    return {
+      'id': id,
+      'title': raw['title'] as String? ?? '',
+      'emoji': raw['emoji'] as String? ?? '🎯',
+      'targetAmount': (raw['targetAmount'] as num?)?.toDouble() ?? 0,
+      'currentAmount': (raw['currentAmount'] as num?)?.toDouble() ?? 0,
+      'deadline': deadline == null ? null : _toIsoString(deadline),
+      'colorIndex': (raw['colorIndex'] as num?)?.toInt() ?? 0,
+      'updatedAt': _toIsoString(raw['updatedAt']),
+    };
+  }
+
+  List<String> _diffFields(
+    Map<String, dynamic>? localData,
+    Map<String, dynamic>? cloudData,
+  ) {
+    if (localData == null || cloudData == null) return const [];
+    if (cloudData['deleted'] == true) return const ['deleted'];
+
+    final keys = <String>{...localData.keys, ...cloudData.keys}
+      ..remove('id')
+      ..remove('updatedAt');
+
+    final diffs = <String>[];
+    for (final key in keys) {
+      final localValue = _normalizeDiffValue(localData[key]);
+      final cloudValue = _normalizeDiffValue(cloudData[key]);
+      if (localValue != cloudValue) {
+        diffs.add(key);
+      }
+    }
+    diffs.sort();
+    return diffs;
+  }
+
+  Object? _normalizeDiffValue(dynamic value) {
+    if (value is DateTime) return value.toUtc().toIso8601String();
+    if (value is num) return value.toDouble();
+    return value;
+  }
+
+  int _entitySortOrder(SyncConflictEntityType type) {
+    return switch (type) {
+      SyncConflictEntityType.expense => 0,
+      SyncConflictEntityType.budget => 1,
+      SyncConflictEntityType.goal => 2,
+    };
+  }
+
+  Future<void> _clearPendingForRecord(
+    SyncConflictEntityType entityType,
+    String id,
+  ) async {
+    switch (entityType) {
+      case SyncConflictEntityType.expense:
+        final expDs = _ref.read(expenseDatasourceProvider);
+        await expDs.clearPendingUpsert(id);
+        await expDs.clearPendingDeletion(id);
+        return;
+      case SyncConflictEntityType.budget:
+        final budgetDs = _ref.read(budgetDatasourceProvider);
+        await budgetDs.clearPendingUpsert(id);
+        await budgetDs.clearPendingDeletion(id);
+        return;
+      case SyncConflictEntityType.goal:
+        final goalDs = _ref.read(goalDatasourceProvider);
+        await goalDs.clearPendingUpsert(id);
+        await goalDs.clearPendingDeletion(id);
+        return;
+    }
+  }
+
+  Future<void> _applyCloudSnapshotForRecord(
+    SyncConflictEntityType entityType,
+    String id,
+    Map<String, dynamic>? cloudData,
+  ) async {
+    switch (entityType) {
+      case SyncConflictEntityType.expense:
+        final expNotifier = _ref.read(expenseProvider.notifier);
+        if (cloudData == null || cloudData['deleted'] == true) {
+          await expNotifier.bulkDeleteFromSync([id]);
+          return;
+        }
+        try {
+          final expense = Expense.fromJson(cloudData);
+          await expNotifier.bulkUpsertFromSync([expense]);
+        } catch (_) {
+          await expNotifier.bulkDeleteFromSync([id]);
+        }
+        return;
+      case SyncConflictEntityType.budget:
+        final budgetDs = _ref.read(budgetDatasourceProvider);
+        if (cloudData == null || cloudData['deleted'] == true) {
+          Budget? localBudget;
+          for (final budget in budgetDs.getAll()) {
+            if (budget.id == id) {
+              localBudget = budget;
+              break;
+            }
+          }
+          if (localBudget != null) {
+            await budgetDs.deleteBudget(
+              id,
+              localBudget.month,
+              localBudget.year,
+              trackPending: false,
+            );
+          }
+        } else {
+          try {
+            final budget = Budget.fromJson(cloudData);
+            await budgetDs.saveBudget(budget, trackPending: false);
+          } catch (_) {}
+        }
+        _ref.read(budgetProvider.notifier).refresh();
+        return;
+      case SyncConflictEntityType.goal:
+        final goalDs = _ref.read(goalDatasourceProvider);
+        if (cloudData == null || cloudData['deleted'] == true) {
+          await goalDs.delete(id, trackPending: false);
+        } else {
+          try {
+            final goal = SavingsGoal.fromJson(cloudData);
+            await goalDs.save(goal, trackPendingUpsert: false);
+          } catch (_) {}
+        }
+        _ref.read(goalsProvider.notifier).refresh();
+        return;
+    }
+  }
+
   bool _isMutationReason(String reason) {
     const hints = <String>[
       'created',
@@ -432,11 +1021,40 @@ class SyncNotifier extends StateNotifier<SyncState> {
     }
   }
 
+  SyncCircuitStatus _currentCircuitStatus() {
+    return SyncCircuitStatus(
+      consecutiveFullFailures: _consecutiveFullFailures,
+      consecutivePullFailures: _consecutivePullFailures,
+      fullFailureThreshold: _fullFailureThreshold,
+      pullFailureThreshold: _pullFailureThreshold,
+      fullOpenUntil: _fullCircuitOpenUntil,
+      pullOpenUntil: _pullCircuitOpenUntil,
+    );
+  }
+
+  void _publishCircuitStatus() {
+    if (!mounted) return;
+    state = state.copyWith(
+      circuitStatus: _currentCircuitStatus(),
+      error: state.error,
+    );
+  }
+
   bool _isCircuitOpen({required bool pullOnly}) {
     final now = DateTime.now();
     final openUntil = pullOnly ? _pullCircuitOpenUntil : _fullCircuitOpenUntil;
     if (openUntil == null) return false;
-    return now.isBefore(openUntil);
+    if (now.isBefore(openUntil)) return true;
+
+    if (pullOnly) {
+      _pullCircuitOpenUntil = null;
+      _consecutivePullFailures = 0;
+    } else {
+      _fullCircuitOpenUntil = null;
+      _consecutiveFullFailures = 0;
+    }
+    _publishCircuitStatus();
+    return false;
   }
 
   Duration _retryDelay({required bool pullOnly, required int failures}) {
@@ -565,15 +1183,16 @@ class SyncNotifier extends StateNotifier<SyncState> {
   void _markFailure({required bool pullOnly}) {
     if (pullOnly) {
       _consecutivePullFailures += 1;
-      if (_consecutivePullFailures >= 5) {
-        _pullCircuitOpenUntil = DateTime.now().add(const Duration(seconds: 30));
+      if (_consecutivePullFailures >= _pullFailureThreshold) {
+        _pullCircuitOpenUntil = DateTime.now().add(_pullCircuitDuration);
       }
     } else {
       _consecutiveFullFailures += 1;
-      if (_consecutiveFullFailures >= 3) {
-        _fullCircuitOpenUntil = DateTime.now().add(const Duration(seconds: 45));
+      if (_consecutiveFullFailures >= _fullFailureThreshold) {
+        _fullCircuitOpenUntil = DateTime.now().add(_fullCircuitDuration);
       }
     }
+    _publishCircuitStatus();
   }
 
   void _markSuccess({required bool pullOnly}) {
@@ -584,6 +1203,7 @@ class SyncNotifier extends StateNotifier<SyncState> {
       _consecutiveFullFailures = 0;
       _fullCircuitOpenUntil = null;
     }
+    _publishCircuitStatus();
   }
 
   /// On startup: fire sync once after a short delay to let the widget tree
@@ -693,9 +1313,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
             'category': e.category.name,
             'date': e.date.toIso8601String(),
             'notes': e.note,
+            'receiptImageBase64': e.receiptImageBase64,
+            'receiptImageMimeType': e.receiptImageMimeType,
+            'receiptImageUrl': e.receiptImageUrl,
+            'receiptStorageKey': e.receiptStorageKey,
+            'receiptOcrText': e.receiptOcrText,
             'isIncome': e.isIncome,
             'isRecurring': e.isRecurring,
             'recurringRule': e.recurringFrequency?.name,
+            'recurringDueDay': e.recurringDueDay,
             'updatedAt': e.updatedAt.toUtc().toIso8601String(),
             'deleted': false,
           });
@@ -916,9 +1542,15 @@ class SyncNotifier extends StateNotifier<SyncState> {
             'category': se['category'],
             'date': _toIsoString(se['date']),
             'note': se['notes'], // server: notes → local: note
+            'receiptImageBase64': se['receiptImageBase64'],
+            'receiptImageMimeType': se['receiptImageMimeType'],
+            'receiptImageUrl': se['receiptImageUrl'],
+            'receiptStorageKey': se['receiptStorageKey'],
+            'receiptOcrText': se['receiptOcrText'],
             'isIncome': se['isIncome'] ?? false,
             'isRecurring': se['isRecurring'] ?? false,
             'recurringFrequency': se['recurringRule'], // server name
+            'recurringDueDay': (se['recurringDueDay'] as num?)?.toInt(),
             'updatedAt': _toIsoString(se['updatedAt']),
           };
           try {
@@ -1177,3 +1809,18 @@ class SyncNotifier extends StateNotifier<SyncState> {
 final syncProvider = StateNotifierProvider<SyncNotifier, SyncState>(
   (ref) => SyncNotifier(ref),
 );
+
+final syncConflictSummaryProvider = Provider<SyncConflictSummary>((ref) {
+  ref.watch(syncProvider);
+  return ref.read(syncProvider.notifier).getLocalConflictSummary();
+});
+
+final syncConflictRecordsProvider =
+    FutureProvider.autoDispose<List<SyncConflictRecord>>((ref) async {
+  ref.watch(syncProvider.select((s) => s.metrics.queueDepth));
+  return ref.read(syncProvider.notifier).buildConflictRecords();
+});
+
+final syncCircuitStatusProvider = Provider<SyncCircuitStatus>((ref) {
+  return ref.watch(syncProvider.select((s) => s.circuitStatus));
+});

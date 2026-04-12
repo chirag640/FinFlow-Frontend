@@ -216,7 +216,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                 'Check your email',
                 style: Theme.of(context).textTheme.headlineMedium?.copyWith(
                       fontWeight: FontWeight.w800,
-                      color: AppColors.textPrimary,
+                      color: colorScheme.onSurface,
                     ),
               ).animate().fadeIn(delay: 100.ms),
               const Gap(6),
@@ -225,13 +225,13 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                   style: Theme.of(context)
                       .textTheme
                       .bodyMedium
-                      ?.copyWith(color: AppColors.textSecondary),
+                      ?.copyWith(color: colorScheme.onSurfaceVariant),
                   children: [
                     const TextSpan(text: 'We sent a 6-digit code to '),
                     TextSpan(
                       text: maskedEmail,
-                      style: const TextStyle(
-                          color: AppColors.textPrimary,
+                      style: TextStyle(
+                          color: colorScheme.onSurface,
                           fontWeight: FontWeight.w600),
                     ),
                   ],
@@ -271,7 +271,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                   child: _resendCooldown > 0
                       ? Text(
                           'Resend in ${_resendCooldown}s',
-                          style: const TextStyle(color: AppColors.textTertiary),
+                          style: TextStyle(color: colorScheme.outline),
                         )
                       : const Text(
                           "Didn't receive the code?  Resend",
@@ -286,7 +286,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                 child: Text(
                   'Check your spam folder if you don\'t see the email.',
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: AppColors.textTertiary,
+                        color: colorScheme.outline,
                       ),
                   textAlign: TextAlign.center,
                 ),
@@ -301,6 +301,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
   Widget _buildDigitField(int index) {
     final screenWidth = MediaQuery.sizeOf(context).width;
     final fieldSize = ((screenWidth - 48 - 5 * 8) / 6).clamp(46.0, 58.0);
+    final colors = Theme.of(context).colorScheme;
 
     return SizedBox(
       width: fieldSize,
@@ -326,7 +327,7 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                 fontSize: 24,
                 height: 1.0,
                 fontWeight: FontWeight.w800,
-                color: AppColors.textPrimary,
+                color: colors.onSurface,
               ),
           decoration: InputDecoration(
             counterText: '',
@@ -339,14 +340,14 @@ class _VerifyEmailPageState extends ConsumerState<VerifyEmailPage> {
                 : Theme.of(context).colorScheme.surfaceContainerHighest,
             border: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.s(12)),
-              borderSide: const BorderSide(color: AppColors.border),
+              borderSide: BorderSide(color: colors.outlineVariant),
             ),
             enabledBorder: OutlineInputBorder(
               borderRadius: BorderRadius.circular(R.s(12)),
               borderSide: BorderSide(
                 color: _digits[index].text.isNotEmpty
                     ? AppColors.primary
-                    : AppColors.border,
+                    : colors.outlineVariant,
               ),
             ),
             focusedBorder: OutlineInputBorder(

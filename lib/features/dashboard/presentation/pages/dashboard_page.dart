@@ -15,6 +15,7 @@ import '../../../auth/presentation/providers/auth_provider.dart';
 import '../../../budgets/presentation/providers/budget_provider.dart';
 import '../../../expenses/domain/entities/expense_category.dart';
 import '../../../expenses/presentation/providers/expense_provider.dart';
+import '../../../expenses/presentation/services/expense_category_suggestion_service.dart';
 import '../../../goals/domain/entities/savings_goal.dart';
 import '../../../goals/presentation/providers/goals_provider.dart';
 import '../../../sync/presentation/providers/sync_provider.dart';
@@ -740,6 +741,8 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
   final _amountCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   ExpenseCategory _category = ExpenseCategory.food;
+  ExpenseCategory? _suggestedCategory;
+  bool _categoryLockedByUser = false;
   bool _isIncome = false;
   bool _isSaving = false;
 
@@ -784,6 +787,25 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
       HapticFeedback.lightImpact();
       Navigator.of(context).pop();
     }
+  }
+
+  void _onDescriptionChanged(String value) {
+    final suggestion = ExpenseCategorySuggestionService.infer(value);
+    setState(() {
+      _suggestedCategory = suggestion;
+      if (!_categoryLockedByUser && suggestion != null) {
+        _category = suggestion;
+      }
+    });
+  }
+
+  void _applySuggestedCategory() {
+    final suggestion = _suggestedCategory;
+    if (suggestion == null) return;
+    setState(() {
+      _category = suggestion;
+      _categoryLockedByUser = true;
+    });
   }
 
   @override
@@ -908,6 +930,7 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
               controller: _descCtrl,
               textCapitalization: TextCapitalization.sentences,
               textInputAction: TextInputAction.done,
+              onChanged: _onDescriptionChanged,
               onSubmitted: (_) => _save(),
               style: const TextStyle(
                 fontSize: 15,
@@ -928,6 +951,33 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                     const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
               ),
             ),
+            if (_suggestedCategory != null) ...[
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  const Icon(
+                    Icons.auto_awesome_rounded,
+                    size: 14,
+                    color: AppColors.textSecondary,
+                  ),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      'Suggested category: ${_suggestedCategory!.label}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                  ),
+                  if (_suggestedCategory != _category)
+                    TextButton(
+                      onPressed: _applySuggestedCategory,
+                      child: const Text('Use'),
+                    ),
+                ],
+              ),
+            ],
             const SizedBox(height: 12),
             // Category chips — horizontal scroll
             SizedBox(
@@ -940,7 +990,10 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                   final cat = ExpenseCategory.values[i];
                   final isSel = cat == _category;
                   return GestureDetector(
-                    onTap: () => setState(() => _category = cat),
+                    onTap: () => setState(() {
+                      _category = cat;
+                      _categoryLockedByUser = true;
+                    }),
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 150),
                       padding: const EdgeInsets.symmetric(
@@ -974,6 +1027,42 @@ class _QuickAddSheetState extends ConsumerState<_QuickAddSheet> {
                 },
               ),
             ),
+            if (!_isIncome &&
+                ExpenseCategorySuggestionService.isBillLike(_category)) ...[
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                decoration: BoxDecoration(
+                  color: AppColors.warningLight,
+                  borderRadius: AppRadius.sm,
+                  border: Border.all(
+                    color: AppColors.warning.withValues(alpha: 0.35),
+                  ),
+                ),
+                child: const Row(
+                  children: [
+                    Icon(
+                      Icons.notifications_active_outlined,
+                      size: 14,
+                      color: AppColors.warning,
+                    ),
+                    SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        'Tip: mark recurring bills in full Add Expense to get due reminders.',
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
             const SizedBox(height: 18),
             // Save button
             SizedBox(
