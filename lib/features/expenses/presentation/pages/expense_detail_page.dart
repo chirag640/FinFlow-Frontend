@@ -15,6 +15,7 @@ import '../../../../core/utils/currency_formatter.dart';
 import '../../../../core/utils/responsive.dart';
 import '../../domain/entities/expense.dart';
 import '../providers/expense_provider.dart';
+import '../widgets/receipt_network_image.dart';
 
 class ExpenseDetailPage extends ConsumerWidget {
   final Expense expense;
@@ -91,11 +92,14 @@ class ExpenseDetailPage extends ConsumerWidget {
             if ((expense.receiptImageBase64 != null &&
                     expense.receiptImageBase64!.isNotEmpty) ||
                 (expense.receiptImageUrl != null &&
-                    expense.receiptImageUrl!.isNotEmpty)) ...[
+                    expense.receiptImageUrl!.isNotEmpty) ||
+                (expense.receiptStorageKey != null &&
+                    expense.receiptStorageKey!.isNotEmpty)) ...[
               SizedBox(height: R.md),
               _ReceiptImageCard(
                 receiptImageBase64: expense.receiptImageBase64,
                 receiptImageUrl: expense.receiptImageUrl,
+                receiptStorageKey: expense.receiptStorageKey,
               ).animate(delay: 170.ms).fadeIn(duration: 300.ms),
             ],
 
@@ -503,8 +507,13 @@ class _NoteCard extends StatelessWidget {
 class _ReceiptImageCard extends StatelessWidget {
   final String? receiptImageBase64;
   final String? receiptImageUrl;
+  final String? receiptStorageKey;
 
-  const _ReceiptImageCard({this.receiptImageBase64, this.receiptImageUrl});
+  const _ReceiptImageCard({
+    this.receiptImageBase64,
+    this.receiptImageUrl,
+    this.receiptStorageKey,
+  });
 
   Widget _buildFallback() {
     return const Center(
@@ -520,8 +529,10 @@ class _ReceiptImageCard extends StatelessWidget {
     final hasBase64 =
         receiptImageBase64 != null && receiptImageBase64!.isNotEmpty;
     final hasUrl = receiptImageUrl != null && receiptImageUrl!.isNotEmpty;
+    final hasStorageKey =
+        receiptStorageKey != null && receiptStorageKey!.isNotEmpty;
 
-    if (!hasBase64 && !hasUrl) {
+    if (!hasBase64 && !hasUrl && !hasStorageKey) {
       return const SizedBox.shrink();
     }
 
@@ -539,12 +550,12 @@ class _ReceiptImageCard extends StatelessWidget {
         image = _buildFallback();
       }
     } else {
-      image = Image.network(
-        receiptImageUrl!,
+      image = ReceiptNetworkImage(
+        receiptImageUrl: receiptImageUrl,
+        receiptStorageKey: receiptStorageKey,
         width: double.infinity,
         height: R.s(220),
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildFallback(),
       );
     }
 

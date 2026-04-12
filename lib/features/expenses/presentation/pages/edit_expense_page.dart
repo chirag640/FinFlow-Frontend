@@ -23,6 +23,7 @@ import '../services/expense_category_suggestion_service.dart';
 import '../services/receipt_ocr_service.dart';
 import '../services/receipt_upload_service.dart';
 import '../widgets/category_picker_sheet.dart';
+import '../widgets/receipt_network_image.dart';
 import '../widgets/recurring_section_widget.dart';
 
 class EditExpensePage extends ConsumerStatefulWidget {
@@ -608,26 +609,21 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                         fit: BoxFit.cover,
                       ),
                     ),
-                  if (_receiptImageBase64 == null && _receiptImageUrl != null)
+                  if (_receiptImageBase64 == null &&
+                      (_receiptImageUrl != null || _receiptStorageKey != null))
                     ClipRRect(
                       borderRadius: BorderRadius.circular(R.s(10)),
-                      child: Image.network(
-                        _receiptImageUrl!,
+                      child: ReceiptNetworkImage(
+                        receiptImageUrl: _receiptImageUrl,
+                        receiptStorageKey: _receiptStorageKey,
                         height: R.s(180),
                         width: double.infinity,
                         fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Container(
-                          height: R.s(180),
-                          width: double.infinity,
-                          color: Theme.of(context)
-                              .colorScheme
-                              .surfaceContainerHigh,
-                          alignment: Alignment.center,
-                          child: const Icon(Icons.broken_image_outlined),
-                        ),
                       ),
                     ),
-                  if (_receiptImageBase64 != null || _receiptImageUrl != null)
+                  if (_receiptImageBase64 != null ||
+                      _receiptImageUrl != null ||
+                      _receiptStorageKey != null)
                     SizedBox(height: R.sm),
                   Wrap(
                     spacing: R.s(10),
@@ -637,20 +633,23 @@ class _EditExpensePageState extends ConsumerState<EditExpensePage> {
                         onPressed: _pickReceiptSource,
                         icon: Icon(
                           (_receiptImageBase64 == null &&
-                                  _receiptImageUrl == null)
+                                  _receiptImageUrl == null &&
+                                  _receiptStorageKey == null)
                               ? Icons.attach_file_rounded
                               : Icons.refresh_rounded,
                           size: R.s(16),
                         ),
                         label: Text(
                           (_receiptImageBase64 == null &&
-                                  _receiptImageUrl == null)
+                                  _receiptImageUrl == null &&
+                                  _receiptStorageKey == null)
                               ? 'Attach Receipt'
                               : 'Replace Receipt',
                         ),
                       ),
                       if (_receiptImageBase64 != null ||
-                          _receiptImageUrl != null)
+                          _receiptImageUrl != null ||
+                          _receiptStorageKey != null)
                         OutlinedButton.icon(
                           onPressed: () {
                             setState(() {
